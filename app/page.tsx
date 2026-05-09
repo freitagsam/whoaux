@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useEffect, useState } from "react";
 import { useUser, useSignIn } from "@clerk/nextjs";
 import Link from "next/link";
