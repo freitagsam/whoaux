@@ -91,7 +91,7 @@ function topArtistToParsed(artist: SpotifyTopArtist): ParsedArtist {
 
 async function fetchAllLikedSongs(
   token: string,
-  max = 2000
+  max = 500
 ): Promise<Array<{ track: SpotifyTrack; added_at: string }>> {
   const limit = 50;
   const first = await spotifyGet<{
@@ -104,21 +104,15 @@ async function fetchAllLikedSongs(
   );
   if (first.total <= limit) return items;
 
-  const extraPages = Math.ceil((Math.min(first.total, max) - limit) / limit);
-  const pages = await Promise.all(
-    Array.from({ length: extraPages }, (_, i) =>
-      spotifyGet<{ items: Array<{ track: SpotifyTrack | null; added_at: string }> }>(
-        `/me/tracks?limit=${limit}&offset=${(i + 1) * limit}`,
-        token
-      ).catch(() => ({ items: [] as Array<{ track: SpotifyTrack | null; added_at: string }> }))
-    )
-  );
-  for (const page of pages) {
-    items.push(
-      ...page.items.filter(
-        (i): i is { track: SpotifyTrack; added_at: string } => !!i?.track?.id
-      )
-    );
+  // Sequential pages — avoids firing 40 simultaneous requests and hitting rate limits
+  const totalToFetch = Math.min(first.total, max);
+  const extraPages = Math.ceil((totalToFetch - limit) / limit);
+  for (let i = 0; i < extraPages; i++) {
+    const page = await spotifyGet<{ items: Array<{ track: SpotifyTrack | null; added_at: string }> }>(
+      `/me/tracks?limit=${limit}&offset=${(i + 1) * limit}`,
+      token
+    ).catch(() => ({ items: [] as Array<{ track: SpotifyTrack | null; added_at: string }> }));
+    items.push(...page.items.filter((i): i is { track: SpotifyTrack; added_at: string } => !!i?.track?.id));
   }
   return items.slice(0, max);
 }
@@ -144,46 +138,28 @@ async function fetchAllPlaylists(token: string): Promise<SpotifyPlaylist[]> {
 
   if (first.total > limit) {
     const extraPages = Math.ceil((first.total - limit) / limit);
-    const pages = await Promise.all(
-      Array.from({ length: extraPages }, (_, i) =>
-        spotifyGet<{ items: RawPlaylistItem[] }>(
-          `/me/playlists?limit=${limit}&offset=${(i + 1) * limit}`,
-          token
-        ).catch(() => ({ items: [] as RawPlaylistItem[] }))
-      )
-    );
-    for (const page of pages) {
+    // Sequential to stay within rate limits
+    for (let i = 0; i < extraPages; i++) {
+      const page = await spotifyGet<{ items: RawPlaylistItem[] }>(
+        `/me/playlists?limit=${limit}&offset=${(i + 1) * limit}`,
+        token
+      ).catch(() => ({ items: [] as RawPlaylistItem[] }));
       raw.push(...page.items.filter((p) => !!p?.id));
     }
   }
 
-  // Log raw tracks field to diagnose 0-count issues
-  console.log("[spotify/sync] Playlists sample (first 5):", raw.slice(0, 5).map(p => ({
-    name: p.name,
-    tracksRaw: p.tracks,
-    hasTotal: typeof p.tracks?.total,
-  })));
-
-  // Some Spotify playlist types (Daylist, AI playlists, radio) return tracks: null
-  // or tracks without a total. Fetch the real count for up to 30 of these so
-  // the UI shows accurate numbers instead of "0 tracks".
-  const needsCount = raw.filter(p => p.tracks?.total == null).slice(0, 30);
+  // Some Spotify playlist types (Daylist, AI playlists, radio) return tracks: null.
+  // Fetch the real count for up to 10 of these sequentially.
+  const needsCount = raw.filter(p => p.tracks?.total == null).slice(0, 10);
+  for (const p of needsCount) {
+    const res = await spotifyGet<{ tracks?: { total?: number } | null }>(
+      `/playlists/${p.id}?fields=tracks.total`,
+      token
+    ).catch(() => ({ tracks: null }));
+    const total = res?.tracks?.total;
+    if (total != null) p.tracks = { total };
+  }
   if (needsCount.length > 0) {
-    const counts = await Promise.allSettled(
-      needsCount.map((p) =>
-        spotifyGet<{ tracks?: { total?: number } | null }>(
-          `/playlists/${p.id}?fields=tracks.total`,
-          token
-        ).catch(() => ({ tracks: null }))
-      )
-    );
-    for (let i = 0; i < needsCount.length; i++) {
-      const result = counts[i];
-      if (result.status === "fulfilled") {
-        const total = result.value?.tracks?.total;
-        if (total != null) needsCount[i].tracks = { total };
-      }
-    }
     console.log(`[spotify/sync] Refreshed track counts for ${needsCount.length} playlists`);
   }
 

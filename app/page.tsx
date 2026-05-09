@@ -126,14 +126,14 @@ export default function HomePage() {
               </>
             ) : (
               <>
-                <Link
+                <a
                   href="/api/auth/login"
                   className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-base font-bold transition-all animate-pulse-glow"
                   style={{ background: "var(--green)", color: "#000" }}
                 >
                   <LogIn size={18} />
                   Connect Spotify
-                </Link>
+                </a>
                 <Link
                   href="/upload"
                   className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-base font-medium transition-all"
@@ -313,14 +313,14 @@ export default function HomePage() {
                 {hasData ? "Go to Dashboard" : "Sync Your Music"}
               </Link>
             ) : (
-              <Link
+              <a
                 href="/api/auth/login"
                 className="flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold"
                 style={{ background: "var(--green)", color: "#000" }}
               >
                 <LogIn size={16} />
                 Connect Spotify
-              </Link>
+              </a>
             )}
             <a
               href="https://www.spotify.com/account/privacy/"

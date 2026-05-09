@@ -100,7 +100,7 @@ export default function Navbar() {
               </button>
             </>
           ) : (
-            <Link
+            <a
               href="/api/auth/login"
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all"
               style={{
@@ -110,7 +110,7 @@ export default function Navbar() {
             >
               <LogIn size={14} />
               Connect Spotify
-            </Link>
+            </a>
           )}
 
           {isSignedIn && (
