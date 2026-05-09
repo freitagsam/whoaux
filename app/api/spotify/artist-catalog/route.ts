@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
@@ -45,13 +44,13 @@ async function searchArtist(name: string, token: string): Promise<SpotifyArtist 
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-  }
-  if (session.error) {
-    return NextResponse.json({ error: "Spotify session expired — please re-sync." }, { status: 401 });
-  }
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+
+  const clerk = await clerkClient();
+  const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "oauth_spotify");
+  const token = tokenResponse.data[0]?.token;
+  if (!token) return NextResponse.json({ error: "Spotify not connected — please sign in again." }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
   const name = searchParams.get("name");
@@ -60,8 +59,6 @@ export async function GET(request: NextRequest) {
   if (!name && !artistId) {
     return NextResponse.json({ error: "Missing artist name or id" }, { status: 400 });
   }
-
-  const token = session.accessToken as string;
 
   try {
     let id = artistId;

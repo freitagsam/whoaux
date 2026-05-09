@@ -1,5 +1,3 @@
-import NextAuth from "next-auth";
-import { authOptions } from "@/lib/auth";
-
-const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST };
+// NextAuth removed — authentication is now handled by Clerk.
+// This file can be deleted.
+export {};

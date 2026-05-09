@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession, signIn, signOut } from "next-auth/react";
+import { useUser, useClerk, useSignIn } from "@clerk/nextjs";
 import { Music2, Trophy, BarChart3, Upload, Zap, LogOut, LogIn, Loader2 } from "lucide-react";
 import { clearSpotifyData } from "@/lib/store";
 
@@ -14,7 +14,22 @@ const links = [
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { data: session, status } = useSession();
+  const { isLoaded, isSignedIn, user } = useUser();
+  const { signOut } = useClerk();
+  const { signIn } = useSignIn();
+
+  const handleSpotifySignIn = async () => {
+    await signIn?.authenticateWithRedirect({
+      strategy: "oauth_spotify",
+      redirectUrl: "/sso-callback",
+      redirectUrlComplete: "/connect",
+    });
+  };
+
+  const handleSignOut = async () => {
+    clearSpotifyData();
+    await signOut({ redirectUrl: "/" });
+  };
 
   return (
     <header
@@ -66,24 +81,24 @@ export default function Navbar() {
 
         {/* Auth + CTA */}
         <div className="flex items-center gap-2">
-          {status === "loading" ? (
+          {!isLoaded ? (
             <Loader2 size={16} className="animate-spin" style={{ color: "var(--text-muted)" }} />
-          ) : session ? (
+          ) : isSignedIn ? (
             <>
               {/* User avatar */}
-              {session.user?.image && (
+              {user?.imageUrl && (
                 <img
-                  src={session.user.image}
-                  alt={session.user.name ?? "User"}
+                  src={user.imageUrl}
+                  alt={user.fullName ?? "User"}
                   className="w-8 h-8 rounded-full object-cover"
                   style={{ border: "2px solid var(--green)" }}
                 />
               )}
               <span className="hidden sm:block text-sm" style={{ color: "var(--text-dim)" }}>
-                {session.user?.name?.split(" ")[0]}
+                {user?.firstName}
               </span>
               <button
-                onClick={() => { clearSpotifyData(); signOut({ callbackUrl: "/" }); }}
+                onClick={handleSignOut}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all"
                 style={{
                   color: "var(--text-muted)",
@@ -96,7 +111,7 @@ export default function Navbar() {
             </>
           ) : (
             <button
-              onClick={() => signIn("spotify")}
+              onClick={handleSpotifySignIn}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all"
               style={{
                 background: "var(--green)",
@@ -108,7 +123,7 @@ export default function Navbar() {
             </button>
           )}
 
-          {session && (
+          {isSignedIn && (
             <Link
               href="/bracket/new"
               className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold"

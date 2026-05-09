@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import {
   ParsedArtist,
   ParsedAlbum,
@@ -202,28 +201,20 @@ async function fetchAllPlaylists(token: string): Promise<SpotifyPlaylist[]> {
 // ─── Route handler ────────────────────────────────────────────────────────
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
 
-  if (!session?.accessToken) {
+  const clerk = await clerkClient();
+  const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "oauth_spotify");
+  const token = tokenResponse.data[0]?.token;
+  if (!token) {
     return NextResponse.json(
-      {
-        error:
-          session?.error === "RefreshAccessTokenError"
-            ? "Your Spotify session expired. Please sign in again."
-            : "Not signed in",
-      },
+      { error: "Spotify not connected — please sign out and sign back in with Spotify." },
       { status: 401 }
     );
   }
-
-  if (session.error) {
-    return NextResponse.json(
-      { error: "Your Spotify session expired. Please sign in again." },
-      { status: 401 }
-    );
-  }
-
-  const token = session.accessToken;
 
   try {
     // Run all 10 Spotify API calls in parallel

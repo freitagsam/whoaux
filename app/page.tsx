@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession, signIn } from "next-auth/react";
+import { useUser, useSignIn } from "@clerk/nextjs";
 import Link from "next/link";
 import {
   Upload, Trophy, BarChart3, Zap, ChevronRight,
@@ -47,23 +47,28 @@ const mockBracketSongs = [
 ];
 
 export default function HomePage() {
-  const { data: session, status } = useSession();
+  const { isLoaded, isSignedIn, user } = useUser();
+  const { signIn } = useSignIn();
   const [hasData, setHasData] = useState(false);
 
   useEffect(() => {
     setHasData(!!loadSpotifyData());
   }, []);
 
-  const isLoggedIn = status === "authenticated";
+  const handleSpotifySignIn = async () => {
+    await signIn?.authenticateWithRedirect({
+      strategy: "oauth_spotify",
+      redirectUrl: "/sso-callback",
+      redirectUrlComplete: "/connect",
+    });
+  };
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--background)" }}>
-      {/* Shared Navbar — shows auth state, dashboard link, sign out, etc. */}
       <Navbar />
 
       {/* Hero */}
       <section className="pt-32 pb-24 px-6 flex flex-col items-center text-center relative overflow-hidden">
-        {/* Background glow orbs */}
         <div
           className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[400px] rounded-full blur-[120px] pointer-events-none"
           style={{ background: "radial-gradient(ellipse, rgba(29,185,84,0.12) 0%, transparent 70%)" }}
@@ -105,7 +110,7 @@ export default function HomePage() {
 
           {/* Auth-aware CTAs */}
           <div className="flex flex-col sm:flex-row items-center gap-3 mt-2">
-            {isLoggedIn ? (
+            {isLoaded && isSignedIn ? (
               <>
                 <Link
                   href={hasData ? "/dashboard" : "/connect"}
@@ -131,7 +136,7 @@ export default function HomePage() {
             ) : (
               <>
                 <button
-                  onClick={() => signIn("spotify", { callbackUrl: "/connect" })}
+                  onClick={handleSpotifySignIn}
                   className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-base font-bold transition-all animate-pulse-glow"
                   style={{ background: "var(--green)", color: "#000" }}
                 >
@@ -155,7 +160,7 @@ export default function HomePage() {
           </div>
 
           {/* Welcome back pill when logged in */}
-          {isLoggedIn && session?.user?.name && (
+          {isLoaded && isSignedIn && user?.fullName && (
             <div
               className="flex items-center gap-2 px-4 py-2 rounded-full text-sm mt-2"
               style={{
@@ -164,10 +169,10 @@ export default function HomePage() {
                 color: "var(--text-dim)",
               }}
             >
-              {session.user.image && (
-                <img src={session.user.image} alt="" className="w-5 h-5 rounded-full" />
+              {user.imageUrl && (
+                <img src={user.imageUrl} alt="" className="w-5 h-5 rounded-full" />
               )}
-              Welcome back, <strong style={{ color: "var(--foreground)" }}>{session.user.name.split(" ")[0]}</strong>
+              Welcome back, <strong style={{ color: "var(--foreground)" }}>{user.firstName}</strong>
             </div>
           )}
         </div>
@@ -183,7 +188,6 @@ export default function HomePage() {
             boxShadow: "0 40px 100px rgba(0,0,0,0.6)",
           }}
         >
-          {/* Window chrome */}
           <div
             className="px-5 py-3 flex items-center gap-2"
             style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-2)" }}
@@ -308,7 +312,7 @@ export default function HomePage() {
             Connect your Spotify for instant access, or request your data export for full listening stats.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
-            {isLoggedIn ? (
+            {isLoaded && isSignedIn ? (
               <Link
                 href={hasData ? "/dashboard" : "/connect"}
                 className="flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold"
@@ -319,7 +323,7 @@ export default function HomePage() {
               </Link>
             ) : (
               <button
-                onClick={() => signIn("spotify", { callbackUrl: "/connect" })}
+                onClick={handleSpotifySignIn}
                 className="flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold"
                 style={{ background: "var(--green)", color: "#000" }}
               >

@@ -1,28 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, Suspense } from "react";
-import { useSession, signIn, signOut } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useUser, useClerk, useSignIn } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { Music2, Loader2, CheckCircle2, AlertCircle, Zap, Heart, ListMusic, X, RefreshCw, LayoutDashboard, TrendingUp, User } from "lucide-react";
 import { saveSpotifyData, loadSpotifyData, clearSpotifyData } from "@/lib/store";
 import Navbar from "@/components/layout/Navbar";
-
-function OAuthErrorBanner() {
-  const searchParams = useSearchParams();
-  const oauthError = searchParams.get("error");
-  if (!oauthError) return null;
-  return (
-    <div
-      className="rounded-xl p-4 mb-6 text-sm text-left leading-relaxed"
-      style={{ background: "rgba(255,68,68,0.08)", border: "1px solid rgba(255,68,68,0.25)", color: "#ff8080" }}
-    >
-      <strong>Sign-in failed.</strong>{" "}
-      {oauthError === "OAuthCallbackError"
-        ? "Spotify returned an error during login — this is usually a temporary rate limit. Wait 30 seconds and try again."
-        : `Error: ${oauthError}. Try signing in again.`}
-    </div>
-  );
-}
 
 type SyncStatus = "idle" | "syncing" | "done" | "error" | "already_connected";
 
@@ -37,7 +20,9 @@ const syncSteps = [
 const TIMEOUT_MS = 30000;
 
 export default function ConnectPage() {
-  const { data: session, status } = useSession();
+  const { isLoaded, isSignedIn } = useUser();
+  const { signOut } = useClerk();
+  const { signIn } = useSignIn();
   const router = useRouter();
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [stepIdx, setStepIdx] = useState(0);
@@ -46,7 +31,7 @@ export default function ConnectPage() {
   const abortRef = useRef<AbortController | null>(null);
   const cancelledRef = useRef(false);
   const syncingRef = useRef(false);
-  const hasCheckedRef = useRef(false); // only run the auth check once
+  const hasCheckedRef = useRef(false);
 
   const doSync = useCallback(async () => {
     if (syncingRef.current) return;
@@ -97,21 +82,21 @@ export default function ConnectPage() {
 
       if ((e as Error).name === "AbortError") {
         setError(
-          "Timed out waiting for Spotify. Make sure SPOTIFY_CLIENT_SECRET and NEXTAUTH_SECRET are filled in inside .env.local, then restart the dev server."
+          "Timed out waiting for Spotify. Make sure SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, CLERK_SECRET_KEY, and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY are set in your environment, then redeploy."
         );
       } else {
-        setError((e as Error).message || "Something went wrong — check the terminal for details.");
+        setError((e as Error).message || "Something went wrong — check the server logs for details.");
       }
       setSyncStatus("error");
     }
   }, [router]);
 
-  const handleCancel = useCallback(() => {
+  const handleCancel = useCallback(async () => {
     cancelledRef.current = true;
     syncingRef.current = false;
     abortRef.current?.abort();
-    signOut({ redirect: false }).finally(() => router.push("/"));
-  }, [router]);
+    await signOut({ redirectUrl: "/" });
+  }, [signOut]);
 
   const handleRetry = useCallback(() => {
     syncingRef.current = false;
@@ -119,15 +104,22 @@ export default function ConnectPage() {
     doSync();
   }, [doSync]);
 
-  // Only auto-sync if this is a fresh OAuth callback (no existing data)
+  const handleSpotifySignIn = useCallback(async () => {
+    await signIn?.authenticateWithRedirect({
+      strategy: "oauth_spotify",
+      redirectUrl: "/sso-callback",
+      redirectUrlComplete: "/connect",
+    });
+  }, [signIn]);
+
+  // Auto-sync once auth is confirmed
   useEffect(() => {
-    if (status === "loading" || hasCheckedRef.current) return;
+    if (!isLoaded || hasCheckedRef.current) return;
     hasCheckedRef.current = true;
 
-    if (status === "authenticated") {
+    if (isSignedIn) {
       const existingData = loadSpotifyData();
       if (existingData) {
-        // If stored data has no songs at all it's a broken/incomplete sync — re-sync automatically
         const isEmpty = existingData.songs.length === 0;
         if (isEmpty) {
           clearSpotifyData();
@@ -136,11 +128,13 @@ export default function ConnectPage() {
           setSyncStatus("already_connected");
         }
       } else {
-        // No data at all — fresh OAuth callback, sync now
         doSync();
       }
     }
-  }, [status, doSync]);
+  }, [isLoaded, isSignedIn, doSync]);
+
+  const showSignIn = isLoaded && !isSignedIn;
+  const showSpinner = !isLoaded || (isSignedIn && syncStatus === "idle");
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--background)" }}>
@@ -150,11 +144,8 @@ export default function ConnectPage() {
         <div className="w-full max-w-md text-center">
 
           {/* Not signed in */}
-          {status !== "authenticated" && status !== "loading" && (
+          {showSignIn && (
             <div className="animate-fade-up">
-              <Suspense fallback={null}>
-                <OAuthErrorBanner />
-              </Suspense>
               <div
                 className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 animate-pulse-glow"
                 style={{ background: "rgba(29,185,84,0.12)", border: "2px solid var(--green)" }}
@@ -186,7 +177,7 @@ export default function ConnectPage() {
               </div>
 
               <button
-                onClick={() => signIn("spotify", { callbackUrl: "/connect" })}
+                onClick={handleSpotifySignIn}
                 className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-bold text-base animate-pulse-glow"
                 style={{ background: "var(--green)", color: "#000" }}
               >
@@ -202,15 +193,15 @@ export default function ConnectPage() {
             </div>
           )}
 
-          {/* Session loading OR authenticated but effect hasn't fired yet — never show blank */}
-          {(status === "loading" || (status === "authenticated" && syncStatus === "idle")) && (
+          {/* Loading / waiting for auth check */}
+          {showSpinner && (
             <div className="animate-fade-in flex flex-col items-center gap-3">
               <Loader2 size={28} className="animate-spin" style={{ color: "var(--text-muted)" }} />
               <p className="text-sm" style={{ color: "var(--text-muted)" }}>Checking connection...</p>
             </div>
           )}
 
-          {/* Already connected — don't auto-sync, let user choose */}
+          {/* Already connected */}
           {syncStatus === "already_connected" && (
             <div className="animate-fade-up">
               <div
