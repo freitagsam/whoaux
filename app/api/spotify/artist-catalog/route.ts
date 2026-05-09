@@ -78,22 +78,32 @@ export async function GET(request: NextRequest) {
       console.log(`[artist-catalog] Found: "${artistName}" id=${id}`);
     }
 
-    // market=from_token is required — without it Spotify returns 400 on content endpoints
-    const limit = 50;
+    // market=from_token is required — without it Spotify returns 400 on content endpoints.
+    // URLSearchParams encodes commas in include_groups as %2C, preventing Spotify from
+    // misinterpreting them as query-string delimiters (which caused "Invalid limit" 400s).
+    const limit = 20;
+    const albumQs = (offset: number) =>
+      new URLSearchParams({
+        include_groups: "album,single,compilation",
+        market: "from_token",
+        limit: String(limit),
+        offset: String(offset),
+      }).toString();
+
     const first = await spotifyGet<{ items: SpotifyAlbum[]; total: number }>(
-      `/artists/${id}/albums?include_groups=album,single,compilation&market=from_token&limit=${limit}&offset=0`,
+      `/artists/${id}/albums?${albumQs(0)}`,
       token
     );
 
-    console.log(`[artist-catalog] Albums: total=${first.total} page1=${first.items.length}`);
+    console.log(`[artist-catalog] Albums: total=${first.total} page1=${first.items?.length ?? 0}`);
 
-    const albums = [...first.items];
+    const albums = [...(first.items ?? [])];
     if (first.total > limit) {
       const extraPages = Math.ceil((first.total - limit) / limit);
       const pages = await Promise.all(
         Array.from({ length: extraPages }, (_, i) =>
           spotifyGet<{ items: SpotifyAlbum[] }>(
-            `/artists/${id}/albums?include_groups=album,single,compilation&market=from_token&limit=${limit}&offset=${(i + 1) * limit}`,
+            `/artists/${id}/albums?${albumQs((i + 1) * limit)}`,
             token
           ).catch((e) => {
             console.warn(`[artist-catalog] Album page ${i + 1} failed:`, e.message);
@@ -101,7 +111,7 @@ export async function GET(request: NextRequest) {
           })
         )
       );
-      for (const page of pages) albums.push(...page.items);
+      for (const page of pages) albums.push(...(page.items ?? []));
     }
 
     // Deduplicate by lowercased name (keep first = usually the original release)

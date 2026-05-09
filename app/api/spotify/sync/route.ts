@@ -34,6 +34,7 @@ interface SpotifyTopArtist {
 }
 
 interface SpotifyProfile {
+  id: string;
   display_name: string;
   email: string;
   country: string;
@@ -130,6 +131,7 @@ interface RawPlaylistItem {
   description?: string;
   images?: Array<{ url: string }>;
   uri: string;
+  owner?: { id?: string };
   tracks?: { href?: string; total?: number } | null;
 }
 
@@ -192,6 +194,7 @@ async function fetchAllPlaylists(token: string): Promise<SpotifyPlaylist[]> {
     description: p.description,
     images: p.images ?? [],
     uri: p.uri,
+    ownerId: p.owner?.id,
     tracks: p.tracks?.total != null ? { total: p.tracks.total } : null,
   }));
 }
@@ -488,6 +491,7 @@ export async function GET() {
       playlists,
       userProfile: profile
         ? {
+            id: profile.id,
             name: profile.display_name,
             email: profile.email,
             image: profile.images[0]?.url,

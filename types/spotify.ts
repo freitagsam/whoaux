@@ -55,6 +55,7 @@ export interface SpotifyPlaylist {
   images: Array<{ url: string }>;
   tracks: { total: number } | null;
   uri: string;
+  ownerId?: string; // Spotify user ID of the playlist owner
 }
 
 // Parsed & normalized song for use in the app
@@ -126,6 +127,7 @@ export interface ParsedSpotifyData {
 
   // OAuth-only: Spotify profile info
   userProfile?: {
+    id?: string;         // Spotify user ID (used to check playlist ownership)
     name: string;
     email?: string;
     image?: string;
