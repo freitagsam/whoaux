@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { Music2, Trophy, BarChart3, Upload, Zap, LogOut, LogIn, Loader2 } from "lucide-react";
+import { clearSpotifyData } from "@/lib/store";
 
 const links = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
@@ -82,7 +83,7 @@ export default function Navbar() {
                 {session.user?.name?.split(" ")[0]}
               </span>
               <button
-                onClick={() => signOut()}
+                onClick={() => { clearSpotifyData(); signOut({ callbackUrl: "/" }); }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all"
                 style={{
                   color: "var(--text-muted)",
