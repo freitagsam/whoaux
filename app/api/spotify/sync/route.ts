@@ -281,8 +281,15 @@ export async function GET() {
         ? recentResult.value.items.filter((i) => !!i?.track?.id)
         : [];
 
+    // Only include playlists the user owns — followed/Spotify-generated ones return 403
+    // on track fetching, and we want the playlist list to only show actionable items.
+    const userId = profileResult.status === "fulfilled" ? profileResult.value.id : null;
     const playlists: SpotifyPlaylist[] =
-      playlistsResult.status === "fulfilled" ? playlistsResult.value : [];
+      playlistsResult.status === "fulfilled"
+        ? userId
+          ? playlistsResult.value.filter((pl) => pl.ownerId === userId)
+          : playlistsResult.value
+        : [];
 
     const profile =
       profileResult.status === "fulfilled" ? profileResult.value : null;
@@ -353,9 +360,11 @@ export async function GET() {
       artist: item.track.artists.map((a) => a.name).join(", "),
       album: item.track.album.name,
       uri: item.track.uri,
-      // Recency-based seeding score: higher = more recently liked / recently played
-      // This is for bracket seeding only — never displayed as "plays"
-      playCount: (likedItems.length - idx) + (recentCountMap.get(item.track.uri) ?? 0) * 5,
+      // playCount = Spotify popularity (0–100, stream-based) boosted by recent plays.
+      // Popularity is real data; the recent-play boost ensures your personal activity
+      // nudges loved songs slightly higher. Never display this number as "play count."
+      playCount: (item.track.popularity > 0 ? item.track.popularity : 50)
+        + (recentCountMap.get(item.track.uri) ?? 0) * 3,
       msPlayed: 0,
       popularity: item.track.popularity,
       duration_ms: item.track.duration_ms,
@@ -374,7 +383,8 @@ export async function GET() {
         artist: item.track.artists.map((a) => a.name).join(", "),
         album: item.track.album.name,
         uri: item.track.uri,
-        playCount: recentCountMap.get(item.track.uri) ?? 1,
+        playCount: (item.track.popularity > 0 ? item.track.popularity : 50)
+          + (recentCountMap.get(item.track.uri) ?? 0) * 3,
         msPlayed: 0,
         popularity: item.track.popularity,
         duration_ms: item.track.duration_ms,

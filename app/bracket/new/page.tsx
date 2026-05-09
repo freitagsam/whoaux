@@ -476,10 +476,7 @@ export default function NewBracketPage() {
                       </button>
                     );
                   })
-                : (data.playlists ?? []).map((pl) => {
-                    const isExternal = !!pl.ownerId && pl.ownerId !== data.userProfile?.id;
-                    const isSpotifyOwned = pl.ownerId === "spotify";
-                    return (
+                : (data.playlists ?? []).map((pl) => (
                     <button
                       key={pl.id}
                       onClick={() => handlePlaylistSelect(pl.id)}
@@ -499,20 +496,8 @@ export default function NewBracketPage() {
                         )}
                         <div className="min-w-0">
                           <div className="font-medium text-sm truncate">{pl.name}</div>
-                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                              {pl.tracks?.total != null ? `${pl.tracks.total} tracks` : "— tracks"}
-                            </span>
-                            {isSpotifyOwned && (
-                              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(255,107,53,0.12)", color: "#ff9966", border: "1px solid rgba(255,107,53,0.25)" }}>
-                                Spotify playlist
-                              </span>
-                            )}
-                            {isExternal && !isSpotifyOwned && (
-                              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(255,68,68,0.08)", color: "#ff8080", border: "1px solid rgba(255,68,68,0.2)" }}>
-                                Not yours
-                              </span>
-                            )}
+                          <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                            {pl.tracks?.total != null ? `${pl.tracks.total} tracks` : "— tracks"}
                           </div>
                         </div>
                       </div>
@@ -532,28 +517,18 @@ export default function NewBracketPage() {
                         )}
                       </div>
                     </button>
-                    );
-                  })
+                  ))
               }
             </div>
 
-            {mode === "playlist" && filter && !loadingPlaylist && playlistSongs.length === 0 && (() => {
-              const selectedPl = data.playlists?.find(p => p.id === filter);
-              const isExternal = !!selectedPl?.ownerId && selectedPl.ownerId !== data.userProfile?.id;
-              const isSpotifyOwned = selectedPl?.ownerId === "spotify";
-              return (
-                <div
-                  className="mt-3 rounded-xl p-3 text-xs leading-relaxed"
-                  style={{ background: "rgba(255,68,68,0.07)", border: "1px solid rgba(255,68,68,0.2)", color: "#ff8080" }}
-                >
-                  {isSpotifyOwned
-                    ? "Spotify-generated playlists (Daylist, radio, AI mixes) can't be accessed through the API. Try one of your own playlists."
-                    : isExternal
-                    ? "This playlist is owned by another user. Spotify only allows reading your own playlists. Try a playlist you created."
-                    : "No playable Spotify tracks found in this playlist. It may contain only local files, podcast episodes, or deleted tracks. Try a different playlist."}
-                </div>
-              );
-            })()}
+            {mode === "playlist" && filter && !loadingPlaylist && playlistSongs.length === 0 && (
+              <div
+                className="mt-3 rounded-xl p-3 text-xs leading-relaxed"
+                style={{ background: "rgba(255,68,68,0.07)", border: "1px solid rgba(255,68,68,0.2)", color: "#ff8080" }}
+              >
+                No playable Spotify tracks found in this playlist. It may contain only local files, podcast episodes, or deleted tracks. Try a different playlist.
+              </div>
+            )}
 
             {mode === "artist" && filter && (
               <div className="mt-4">

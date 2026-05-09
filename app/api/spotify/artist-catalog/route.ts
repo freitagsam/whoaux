@@ -78,17 +78,13 @@ export async function GET(request: NextRequest) {
       console.log(`[artist-catalog] Found: "${artistName}" id=${id}`);
     }
 
-    // market=from_token is required — without it Spotify returns 400 on content endpoints.
-    // URLSearchParams encodes commas in include_groups as %2C, preventing Spotify from
-    // misinterpreting them as query-string delimiters (which caused "Invalid limit" 400s).
+    // Commas in include_groups must be literal (URLSearchParams encodes them as %2C which
+    // Spotify's parser rejects, producing a misleading "Invalid limit" 400 error).
+    // market is intentionally omitted — it's optional on this endpoint and from_token
+    // causes 400 on some Spotify accounts.
     const limit = 20;
     const albumQs = (offset: number) =>
-      new URLSearchParams({
-        include_groups: "album,single,compilation",
-        market: "from_token",
-        limit: String(limit),
-        offset: String(offset),
-      }).toString();
+      `include_groups=album,single,compilation&limit=${limit}&offset=${offset}`;
 
     const first = await spotifyGet<{ items: SpotifyAlbum[]; total: number }>(
       `/artists/${id}/albums?${albumQs(0)}`,

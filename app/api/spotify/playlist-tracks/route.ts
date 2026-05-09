@@ -56,34 +56,35 @@ export async function GET(request: NextRequest) {
   try {
     // market=from_token is required on content endpoints — without it some regions get 400
     const first = await spotifyGet<{
-      items: PlaylistItem[];
+      items: PlaylistItem[] | null;
       total: number;
     }>(`/playlists/${id}/tracks?market=from_token&limit=100&offset=0`, token);
 
-    const items: Array<PlaylistItem & { track: SpotifyTrack }> = first.items.filter(isPlayableTrack);
+    const items: Array<PlaylistItem & { track: SpotifyTrack }> = (first.items ?? []).filter(isPlayableTrack);
 
     if (first.total > 100) {
       const extraPages = Math.ceil((first.total - 100) / 100);
       const pages = await Promise.all(
         Array.from({ length: extraPages }, (_, i) =>
-          spotifyGet<{ items: PlaylistItem[] }>(
+          spotifyGet<{ items: PlaylistItem[] | null }>(
             `/playlists/${id}/tracks?market=from_token&limit=100&offset=${(i + 1) * 100}`,
             token
           ).catch(() => ({ items: [] as PlaylistItem[] }))
         )
       );
       for (const page of pages) {
-        items.push(...page.items.filter(isPlayableTrack));
+        items.push(...(page.items ?? []).filter(isPlayableTrack));
       }
     }
 
-    const songs: ParsedSong[] = items.map(({ track }, idx) => ({
+    const songs: ParsedSong[] = items.map(({ track }) => ({
       id: track.id,
       name: track.name,
       artist: track.artists.map((a) => a.name).join(", "),
       album: track.album?.name ?? "",
       uri: track.uri,
-      playCount: items.length - idx,
+      // Use Spotify popularity (stream-based, 0–100) as seeding score; fall back to 50
+      playCount: track.popularity > 0 ? track.popularity : 50,
       msPlayed: 0,
       popularity: track.popularity,
       duration_ms: track.duration_ms,
