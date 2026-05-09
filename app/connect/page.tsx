@@ -104,10 +104,17 @@ export default function ConnectPage() {
     if (status === "authenticated") {
       const existingData = loadSpotifyData();
       if (existingData) {
-        // Already have data — don't auto-sync, show the connected state
-        setSyncStatus("already_connected");
+        // If stored data has no songs at all it's a broken/incomplete sync — re-sync automatically
+        const isEmpty = existingData.songs.length === 0 &&
+          (!existingData.topSongs || existingData.topSongs.length === 0);
+        if (isEmpty) {
+          clearSpotifyData();
+          doSync();
+        } else {
+          setSyncStatus("already_connected");
+        }
       } else {
-        // Freshly logged in with no data — this is the OAuth callback, sync now
+        // No data at all — fresh OAuth callback, sync now
         doSync();
       }
     }
@@ -195,20 +202,20 @@ export default function ConnectPage() {
               </p>
               <div className="flex flex-col gap-3">
                 <button
-                  onClick={() => router.push("/dashboard")}
+                  onClick={() => { clearSpotifyData(); setSyncStatus("idle"); doSync(); }}
                   className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold"
                   style={{ background: "var(--green)", color: "#000" }}
                 >
-                  <LayoutDashboard size={16} />
-                  Go to Dashboard
+                  <RefreshCw size={15} />
+                  Re-sync Spotify Data
                 </button>
                 <button
-                  onClick={() => { clearSpotifyData(); setSyncStatus("idle"); doSync(); }}
+                  onClick={() => router.push("/dashboard")}
                   className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-medium"
                   style={{ background: "var(--bg-2)", border: "1px solid var(--border)", color: "var(--text-dim)" }}
                 >
-                  <RefreshCw size={15} />
-                  Re-sync Spotify Data
+                  <LayoutDashboard size={16} />
+                  Go to Dashboard
                 </button>
               </div>
             </div>
