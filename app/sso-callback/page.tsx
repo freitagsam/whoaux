@@ -1,57 +1,110 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useUser, AuthenticateWithRedirectCallback } from "@clerk/nextjs";
+import { useSignIn, useSignUp } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { Loader2, AlertCircle } from "lucide-react";
 
 export default function SSOCallback() {
-  const { isLoaded, isSignedIn } = useUser();
+  const { isLoaded: siLoaded, signIn, setActive: siSetActive } = useSignIn();
+  const { isLoaded: suLoaded, signUp, setActive: suSetActive } = useSignUp();
   const router = useRouter();
-  const navigated = useRef(false);
-  const [timedOut, setTimedOut] = useState(false);
+  const done = useRef(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Clerk's Next.js adapter calls invalidateCacheAction().then(resolve) for Next.js 16
-  // sign-in flows. If that server action fails the promise never resolves and
-  // handleRedirectCallback hangs forever. Patching to resolve immediately unblocks it.
-  // router.refresh() in onAfterSetActive still runs to keep the cache consistent.
   useEffect(() => {
-    const win = window as Window & {
-      __unstable__onBeforeSetActive?: (intent: string) => Promise<void>;
+    if (!siLoaded || !suLoaded || done.current) return;
+    done.current = true;
+
+    const run = async () => {
+      try {
+        const siStatus = signIn?.status;
+        const transferable =
+          signIn?.firstFactorVerification?.status === "transferable";
+
+        // ── returning user ──────────────────────────────────────────────
+        if (siStatus === "complete") {
+          await siSetActive!({ session: signIn!.createdSessionId });
+          router.push("/connect");
+          return;
+        }
+
+        // ── new Spotify user (needs to be converted to a sign-up) ───────
+        if (transferable) {
+          const res = await signUp!.create({ transfer: true });
+          if (res.status === "complete") {
+            await suSetActive!({ session: res.createdSessionId });
+            router.push("/connect");
+            return;
+          }
+          if (res.status === "missing_requirements") {
+            setError(
+              "Sign-up has missing requirements.\n\n" +
+                "Fix in Clerk Dashboard → User & Authentication → " +
+                "Email, Phone, Username:\n" +
+                "• Turn OFF 'Verify at sign-up'\n" +
+                "• Turn OFF 'Password'\n" +
+                "Then try again."
+            );
+            return;
+          }
+          throw new Error(`Unexpected sign-up status after transfer: ${res.status}`);
+        }
+
+        // ── sign-up already complete (rare path) ────────────────────────
+        if (signUp?.status === "complete") {
+          await suSetActive!({ session: signUp!.createdSessionId });
+          router.push("/connect");
+          return;
+        }
+
+        // ── nothing recognised — show debug info ────────────────────────
+        setError(
+          "Auth state not recognised after OAuth redirect.\n\n" +
+            JSON.stringify(
+              {
+                signIn: {
+                  status: siStatus ?? null,
+                  firstFactor: signIn?.firstFactorVerification ?? null,
+                },
+                signUp: { status: signUp?.status ?? null },
+                urlSearch: window.location.search.slice(0, 120),
+                urlHash: window.location.hash.slice(0, 60),
+              },
+              null,
+              2
+            )
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(msg || "Authentication failed — check the error above and try again.");
+      }
     };
-    const original = win.__unstable__onBeforeSetActive;
-    win.__unstable__onBeforeSetActive = () => Promise.resolve();
-    return () => {
-      win.__unstable__onBeforeSetActive = original;
-    };
-  }, []);
 
-  // Belt-and-suspenders: if Clerk creates a session but its own navigation fails,
-  // we detect isSignedIn becoming true and push ourselves.
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn || navigated.current) return;
-    navigated.current = true;
-    router.push("/connect");
-  }, [isLoaded, isSignedIn, router]);
+    run();
+  }, [siLoaded, suLoaded, signIn, signUp, siSetActive, suSetActive, router]);
 
-  // Timeout fallback — show an error instead of spinning forever
-  useEffect(() => {
-    const t = setTimeout(() => setTimedOut(true), 15000);
-    return () => clearTimeout(t);
-  }, []);
-
-  if (timedOut) {
+  if (error) {
     return (
       <div
         className="min-h-screen flex items-center justify-center px-6"
         style={{ background: "var(--background)" }}
       >
-        <div className="flex flex-col items-center gap-4 max-w-sm text-center">
+        <div className="flex flex-col items-center gap-4 w-full max-w-md text-center">
           <AlertCircle size={32} style={{ color: "#ff4444" }} />
-          <h2 className="text-2xl font-bold">Connection stalled</h2>
-          <p className="text-sm leading-relaxed" style={{ color: "#ff8080" }}>
-            Spotify authentication did not complete. Please try again.
-          </p>
+          <h2 className="text-2xl font-bold">Connection failed</h2>
+          <pre
+            className="text-xs text-left w-full p-3 rounded-lg overflow-auto max-h-56"
+            style={{
+              background: "rgba(255,68,68,0.07)",
+              border: "1px solid rgba(255,68,68,0.2)",
+              color: "#ff8080",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {error}
+          </pre>
           <button
             onClick={() => router.push("/connect")}
             className="px-6 py-3 rounded-xl font-bold text-sm"
@@ -71,15 +124,10 @@ export default function SSOCallback() {
     >
       <div className="flex flex-col items-center gap-3">
         <Loader2 size={28} className="animate-spin" style={{ color: "var(--text-muted)" }} />
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Connecting Spotify...</p>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          Connecting Spotify...
+        </p>
       </div>
-      <AuthenticateWithRedirectCallback
-        afterSignInUrl="/connect"
-        afterSignUpUrl="/connect"
-        continueSignUpUrl="/connect"
-        signInUrl="/connect"
-        signUpUrl="/connect"
-      />
     </div>
   );
 }
