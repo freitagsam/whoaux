@@ -28,11 +28,67 @@ export default function NewBracketPage() {
   const [creating, setCreating] = useState(false);
   const [playlistSongs, setPlaylistSongs] = useState<ParsedSong[]>([]);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
+  const [artistSource, setArtistSource] = useState<"library" | "discography" | "albums">("library");
+  const [artistAlbums, setArtistAlbums] = useState<Array<{id: string; name: string; year: string; totalTracks: number; type: string; image: string | null}>>([]);
+  const [selectedAlbumIds, setSelectedAlbumIds] = useState<Set<string>>(new Set());
+  const [artistDiscSongs, setArtistDiscSongs] = useState<ParsedSong[]>([]);
+  const [loadingArtistCatalog, setLoadingArtistCatalog] = useState(false);
 
   useEffect(() => {
     const d = loadSpotifyData();
     if (d) setData(d);
   }, []);
+
+  useEffect(() => {
+    if (data?.dataSource === "oauth") {
+      setSeedingMethod("popularity");
+    }
+  }, [data]);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (mode !== "artist" || !filter) return;
+    if (artistSource === "library") {
+      setArtistDiscSongs([]);
+      setArtistAlbums([]);
+      return;
+    }
+    if (artistSource === "discography") {
+      (async () => {
+        setLoadingArtistCatalog(true);
+        setArtistAlbums([]);
+        setArtistDiscSongs([]);
+        try {
+          const res = await fetch(`/api/spotify/artist-catalog?name=${encodeURIComponent(filter)}`);
+          const json = await res.json();
+          if (!res.ok) { toast.error(json.error ?? "Could not load artist."); setLoadingArtistCatalog(false); return; }
+          const albums: Array<{id: string; name: string}> = json.albums ?? [];
+          setArtistAlbums(json.albums ?? []);
+          if (albums.length === 0) { setLoadingArtistCatalog(false); return; }
+          const albumIds = albums.map((a) => a.id);
+          const albumNamesEncoded = encodeURIComponent(albums.map((a) => a.name).join("|||"));
+          const tracksRes = await fetch(`/api/spotify/artist-tracks?albumIds=${albumIds.join(",")}&albumNames=${albumNamesEncoded}`);
+          const tracksJson = await tracksRes.json();
+          if (!tracksRes.ok) { toast.error(tracksJson.error ?? "Could not load tracks."); setLoadingArtistCatalog(false); return; }
+          setArtistDiscSongs(tracksJson.songs ?? []);
+        } catch {
+          toast.error("Failed to load discography.");
+        } finally {
+          setLoadingArtistCatalog(false);
+        }
+      })();
+    }
+    if (artistSource === "albums") {
+      fetchArtistAlbums(filter);
+    }
+  }, [artistSource, filter, mode]);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (mode !== "artist" || artistSource !== "albums" || selectedAlbumIds.size === 0) return;
+    const ids = Array.from(selectedAlbumIds);
+    fetchArtistSongsFromAlbums(ids);
+  }, [selectedAlbumIds]);
 
   const filteredArtists = data?.artists.filter((a) =>
     a.name.toLowerCase().includes(search.toLowerCase())
@@ -49,11 +105,49 @@ export default function NewBracketPage() {
     try {
       const res = await fetch(`/api/spotify/playlist-tracks?id=${playlistId}`);
       const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to load playlist tracks.");
+        return;
+      }
       setPlaylistSongs(json.songs ?? []);
     } catch {
       toast.error("Failed to load playlist tracks.");
     } finally {
       setLoadingPlaylist(false);
+    }
+  };
+
+  const fetchArtistAlbums = async (artistName: string) => {
+    setLoadingArtistCatalog(true);
+    setArtistAlbums([]);
+    setArtistDiscSongs([]);
+    try {
+      const res = await fetch(`/api/spotify/artist-catalog?name=${encodeURIComponent(artistName)}`);
+      const json = await res.json();
+      if (!res.ok) { toast.error(json.error ?? "Could not load artist catalog."); return; }
+      setArtistAlbums(json.albums ?? []);
+      setSelectedAlbumIds(new Set((json.albums ?? []).map((a: {id: string}) => a.id)));
+    } catch {
+      toast.error("Failed to load artist albums.");
+    } finally {
+      setLoadingArtistCatalog(false);
+    }
+  };
+
+  const fetchArtistSongsFromAlbums = async (albumIds: string[]) => {
+    if (albumIds.length === 0) { setArtistDiscSongs([]); return; }
+    setLoadingArtistCatalog(true);
+    try {
+      const selectedAlbums = artistAlbums.filter((a) => albumIds.includes(a.id));
+      const albumNamesEncoded = encodeURIComponent(selectedAlbums.map((a) => a.name).join("|||"));
+      const res = await fetch(`/api/spotify/artist-tracks?albumIds=${albumIds.join(",")}&albumNames=${albumNamesEncoded}`);
+      const json = await res.json();
+      if (!res.ok) { toast.error(json.error ?? "Could not load tracks."); return; }
+      setArtistDiscSongs(json.songs ?? []);
+    } catch {
+      toast.error("Failed to load artist tracks.");
+    } finally {
+      setLoadingArtistCatalog(false);
     }
   };
 
@@ -63,7 +157,7 @@ export default function NewBracketPage() {
     if (mode === "liked") return data.likedSongs.length;
     if (mode === "top") return data.topSongs.length;
     if (mode === "artist") {
-      // Mirror bracket-generator.ts: filter data.songs by artist name
+      if (artistSource !== "library") return artistDiscSongs.length;
       return data.songs.filter((s) => s.artist.toLowerCase() === filter.toLowerCase()).length;
     }
     if (mode === "album") {
@@ -82,7 +176,11 @@ export default function NewBracketPage() {
   const getBracketName = (): string => {
     if (mode === "top") return "My Top Songs Bracket";
     if (mode === "liked") return "Liked Songs Bracket";
-    if (mode === "artist") return `${filter} — Artist Bracket`;
+    if (mode === "artist") {
+      if (artistSource === "discography") return `${filter} — Full Discography Bracket`;
+      if (artistSource === "albums") return `${filter} — Albums Bracket`;
+      return `${filter} — Artist Bracket`;
+    }
     if (mode === "album") {
       const al = data?.albums.find((x) => `${x.name}::${x.artist}` === filter);
       return al ? `${al.name} — Album Bracket` : "Album Bracket";
@@ -115,6 +213,7 @@ export default function NewBracketPage() {
       size,
       name: getBracketName(),
       playlistSongs: mode === "playlist" ? playlistSongs : undefined,
+      customPool: mode === "artist" && artistSource !== "library" ? artistDiscSongs : undefined,
     });
 
     if (!bracket) {
@@ -133,6 +232,11 @@ export default function NewBracketPage() {
     if (step === "filter") {
       if (mode === "top" || mode === "liked") return true;
       if (mode === "playlist") return !!filter && !loadingPlaylist;
+      if (mode === "artist") {
+        if (!filter) return false;
+        if (artistSource === "library") return true;
+        return !loadingArtistCatalog && artistDiscSongs.length >= 4;
+      }
       return !!filter;
     }
     if (step === "seeding") return true;
@@ -259,9 +363,9 @@ export default function NewBracketPage() {
             <h2 className="text-2xl font-semibold mb-5">What do you want to bracket?</h2>
 
             {[
-              { id: "top" as BracketMode, icon: TrendingUp, label: "My Top Songs", desc: `Your ${data.topSongs.length} most-played tracks`, color: "var(--green)" },
+              { id: "top" as BracketMode, icon: TrendingUp, label: "My Top Songs", desc: `${data.topSongs.length} top tracks from Spotify's algorithm`, color: "var(--green)" },
               { id: "liked" as BracketMode, icon: Heart, label: "Liked Songs", desc: `${data.likedSongs.length} songs from your library`, color: "#ff6b8a" },
-              { id: "artist" as BracketMode, icon: User, label: "Artist Discography", desc: "All songs from a specific artist", color: "var(--cyan)" },
+              { id: "artist" as BracketMode, icon: User, label: "Artist Discography", desc: `${data.artists.length} artists · choose library or full catalog`, color: "var(--cyan)" },
               { id: "album" as BracketMode, icon: Disc3, label: "Album", desc: "Every track from one album", color: "#a855f7" },
               ...(data.playlists && data.playlists.length > 0
                 ? [{ id: "playlist" as BracketMode, icon: ListMusic, label: "Playlist", desc: `${data.playlists.length} playlists`, color: "#f59e0b" }]
@@ -332,7 +436,7 @@ export default function NewBracketPage() {
                 ? filteredArtists.map((artist) => (
                     <button
                       key={artist.name}
-                      onClick={() => setFilter(artist.name)}
+                      onClick={() => { setFilter(artist.name); setArtistSource("library"); setArtistDiscSongs([]); setArtistAlbums([]); setSelectedAlbumIds(new Set()); }}
                       className="w-full flex items-center justify-between p-4 rounded-xl text-left transition-all"
                       style={{
                         background: filter === artist.name ? "rgba(0,212,255,0.07)" : "var(--bg-1)",
@@ -409,6 +513,119 @@ export default function NewBracketPage() {
                   ))
               }
             </div>
+
+            {mode === "artist" && filter && (
+              <div className="mt-4">
+                <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)" }}>
+                  Song Pool
+                </div>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {([
+                    { key: "library" as const, label: "My Library", desc: `${data.songs.filter(s => s.artist.toLowerCase() === filter.toLowerCase()).length} songs` },
+                    { key: "discography" as const, label: "Full Catalog", desc: "All Spotify releases" },
+                    { key: "albums" as const, label: "Pick Albums", desc: "Choose specific albums" },
+                  ] as const).map(({ key, label, desc }) => (
+                    <button
+                      key={key}
+                      onClick={() => setArtistSource(key)}
+                      className="p-3 rounded-xl text-left transition-all"
+                      style={{
+                        background: artistSource === key ? "rgba(0,212,255,0.08)" : "var(--bg-1)",
+                        border: `2px solid ${artistSource === key ? "var(--cyan)" : "var(--border)"}`,
+                      }}
+                    >
+                      <div className="font-semibold text-xs">{label}</div>
+                      <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{desc}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {(artistSource === "discography" || artistSource === "albums") && loadingArtistCatalog && (
+                  <div className="flex items-center gap-2 text-sm py-3" style={{ color: "var(--text-muted)" }}>
+                    <Loader2 size={14} className="animate-spin" />
+                    {artistSource === "discography" ? "Loading full discography…" : "Loading albums…"}
+                  </div>
+                )}
+
+                {artistSource === "discography" && !loadingArtistCatalog && artistDiscSongs.length > 0 && (
+                  <div className="text-sm py-2" style={{ color: "var(--green)" }}>
+                    ✓ {artistDiscSongs.length} songs loaded from {artistAlbums.length} releases — seeded by Spotify popularity
+                  </div>
+                )}
+
+                {artistSource === "albums" && !loadingArtistCatalog && artistAlbums.length > 0 && (
+                  <>
+                    <div className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "var(--text-muted)" }}>
+                      Select Albums
+                    </div>
+                    <div className="flex items-center gap-3 mb-3">
+                      <button
+                        className="text-xs underline"
+                        style={{ color: "var(--green)" }}
+                        onClick={() => setSelectedAlbumIds(new Set(artistAlbums.map(a => a.id)))}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        className="text-xs underline"
+                        style={{ color: "var(--text-muted)" }}
+                        onClick={() => setSelectedAlbumIds(new Set())}
+                      >
+                        Clear
+                      </button>
+                      {artistDiscSongs.length > 0 && (
+                        <span className="text-xs ml-auto" style={{ color: "var(--green)" }}>
+                          {artistDiscSongs.length} songs
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-2 max-h-72 overflow-y-auto">
+                      {artistAlbums.map((album) => {
+                        const checked = selectedAlbumIds.has(album.id);
+                        return (
+                          <button
+                            key={album.id}
+                            onClick={() => {
+                              const next = new Set(selectedAlbumIds);
+                              if (checked) next.delete(album.id);
+                              else next.add(album.id);
+                              setSelectedAlbumIds(next);
+                            }}
+                            className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all"
+                            style={{
+                              background: checked ? "rgba(0,212,255,0.06)" : "var(--bg-1)",
+                              border: `1px solid ${checked ? "var(--cyan)" : "var(--border)"}`,
+                            }}
+                          >
+                            {album.image ? (
+                              <img src={album.image} alt={album.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg flex-shrink-0" style={{ background: "var(--bg-3)" }} />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm truncate">{album.name}</div>
+                              <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+                                {album.year} · {album.totalTracks} tracks · {album.type}
+                              </div>
+                            </div>
+                            <div
+                              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
+                              style={{ background: checked ? "var(--cyan)" : "var(--bg-3)", border: `1px solid ${checked ? "var(--cyan)" : "var(--border)"}` }}
+                            >
+                              {checked && (
+                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                  <path d="M1 4l3 3 5-6" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -416,26 +633,53 @@ export default function NewBracketPage() {
         {step === "seeding" && (
           <div className="animate-scale-in space-y-4">
             <h2 className="text-2xl font-semibold mb-5">How should songs be seeded?</h2>
-            <p className="text-sm mb-6" style={{ color: "var(--text-dim)" }}>
-              Seeding determines matchups — top seeds face bottom seeds in round 1 (like March Madness).
+            <p className="text-sm mb-4" style={{ color: "var(--text-dim)" }}>
+              Seeding determines round 1 matchups — top seeds face bottom seeds, like March Madness.
             </p>
 
-            {[
-              {
-                id: "personal" as SeedingMethod,
-                icon: Zap,
-                label: "Personal Play Count",
-                desc: "Seeded by how many times YOU played each song. More personal listens = higher seed.",
-                color: "var(--green)",
-              },
-              {
-                id: "artist_total" as SeedingMethod,
-                icon: TrendingUp,
-                label: "Artist's Total Plays",
-                desc: "Seeded by your total plays across all songs from that artist. Great for discovering underrated tracks.",
-                color: "var(--orange)",
-              },
-            ].map(({ id, icon: Icon, label, desc, color }) => (
+            {data.dataSource === "oauth" && (
+              <div
+                className="rounded-xl p-3 mb-4 text-xs leading-relaxed"
+                style={{ background: "rgba(29,185,84,0.06)", border: "1px solid rgba(29,185,84,0.2)", color: "var(--text-muted)" }}
+              >
+                Spotify's API doesn't expose raw stream counts. Seeding uses Spotify's <strong style={{ color: "var(--green)" }}>popularity score</strong> (0–100) as the best available proxy. Upload your Spotify data export for real play counts.
+              </div>
+            )}
+
+            {(data.dataSource === "oauth"
+              ? [
+                  {
+                    id: "popularity" as SeedingMethod,
+                    icon: TrendingUp,
+                    label: "Spotify Popularity",
+                    desc: "Seeded by Spotify's popularity score (0–100). Reflects overall listener activity — higher popularity = higher seed.",
+                    color: "var(--green)",
+                  },
+                  {
+                    id: "personal" as SeedingMethod,
+                    icon: Zap,
+                    label: "Library Recency",
+                    desc: "Seeded by how recently you liked or played each song. Most recently added/played = highest seed.",
+                    color: "var(--cyan)",
+                  },
+                ]
+              : [
+                  {
+                    id: "personal" as SeedingMethod,
+                    icon: Zap,
+                    label: "Personal Play Count",
+                    desc: "Seeded by how many times YOU personally played each song. More listens = higher seed.",
+                    color: "var(--green)",
+                  },
+                  {
+                    id: "artist_total" as SeedingMethod,
+                    icon: TrendingUp,
+                    label: "Artist's Total Plays",
+                    desc: "Seeded by your total plays across all songs from that artist. Great for surfacing underrated tracks.",
+                    color: "var(--orange)",
+                  },
+                ]
+            ).map(({ id, icon: Icon, label, desc, color }) => (
               <button
                 key={id}
                 onClick={() => setSeedingMethod(id)}
@@ -457,6 +701,12 @@ export default function NewBracketPage() {
                 </div>
               </button>
             ))}
+
+            {(mode === "artist" && artistSource !== "library") && (
+              <div className="rounded-xl p-3 text-xs" style={{ background: "var(--bg-2)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+                Artist catalog songs are seeded by Spotify popularity — actual stream counts aren't available through the API.
+              </div>
+            )}
           </div>
         )}
 
@@ -534,7 +784,7 @@ export default function NewBracketPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Zap size={12} style={{ color: "var(--cyan)" }} />
-                  Seeded by: {seedingMethod === "personal" ? "your personal plays" : "artist total plays"}
+                  Seeded by: {seedingMethod === "popularity" ? "Spotify popularity" : seedingMethod === "personal" ? (data.dataSource === "oauth" ? "library recency" : "your personal plays") : "artist total plays"}
                 </div>
               </div>
             </div>

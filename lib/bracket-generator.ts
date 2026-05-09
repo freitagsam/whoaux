@@ -38,6 +38,7 @@ export function generateBracket(
     size: BracketSize;
     name: string;
     playlistSongs?: ParsedSong[];
+    customPool?: ParsedSong[];
   }
 ): Bracket | null {
   let pool: ParsedSong[] = [];
@@ -47,9 +48,11 @@ export function generateBracket(
       pool = [...data.likedSongs];
       break;
     case "artist":
-      pool = data.songs.filter(
-        (s) => s.artist.toLowerCase() === options.filter.toLowerCase()
-      );
+      pool = options.customPool
+        ? [...options.customPool]
+        : data.songs.filter(
+            (s) => s.artist.toLowerCase() === options.filter.toLowerCase()
+          );
       break;
     case "album":
       pool = data.songs.filter(
@@ -67,7 +70,9 @@ export function generateBracket(
   if (pool.length < 4) return null;
 
   // Sort by chosen seeding method
-  if (options.seedingMethod === "personal") {
+  if (options.seedingMethod === "popularity") {
+    pool.sort((a, b) => (b.popularity ?? b.playCount) - (a.popularity ?? a.playCount));
+  } else if (options.seedingMethod === "personal") {
     pool.sort((a, b) => b.playCount - a.playCount);
   } else {
     pool.sort((a, b) => (b.artistPlayCount ?? b.playCount) - (a.artistPlayCount ?? a.playCount));

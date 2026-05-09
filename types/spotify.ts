@@ -146,7 +146,7 @@ export interface ParsedSpotifyData {
 
 // Bracket types
 export type BracketMode = "liked" | "artist" | "album" | "top" | "playlist";
-export type SeedingMethod = "personal" | "artist_total";
+export type SeedingMethod = "personal" | "artist_total" | "popularity";
 export type BracketSize = 8 | 16 | 32 | 64;
 
 export interface BracketSong extends ParsedSong {
