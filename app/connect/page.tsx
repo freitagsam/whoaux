@@ -61,7 +61,13 @@ export default function ConnectPage() {
 
       const data = await res.json();
       setStepIdx(syncSteps.length);
-      saveSpotifyData(data);
+      const saved = saveSpotifyData(data);
+      if (!saved) {
+        throw new Error(
+          "Your Spotify data was fetched but couldn't be saved locally. " +
+          "Try clearing your browser's site data for this page, then sync again."
+        );
+      }
       setSyncedSongs(data.songs?.length ?? 0);
       setSyncStatus("done");
       setTimeout(() => router.push("/dashboard"), 1800);

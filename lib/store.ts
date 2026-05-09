@@ -6,11 +6,30 @@ import { ParsedSpotifyData, Bracket } from "@/types/spotify";
 const SPOTIFY_DATA_KEY = "sb_spotify_data";
 const BRACKETS_KEY = "sb_brackets";
 
-export function saveSpotifyData(data: ParsedSpotifyData): void {
+export function saveSpotifyData(data: ParsedSpotifyData): boolean {
   try {
-    localStorage.setItem(SPOTIFY_DATA_KEY, JSON.stringify(data));
-  } catch {
-    console.error("Failed to save Spotify data to localStorage");
+    const serialized = JSON.stringify(data);
+    localStorage.setItem(SPOTIFY_DATA_KEY, serialized);
+    // Verify the write actually landed
+    const verify = localStorage.getItem(SPOTIFY_DATA_KEY);
+    if (!verify) throw new Error("Write verification failed");
+    return true;
+  } catch (err) {
+    console.error("[store] Failed to save Spotify data:", err);
+    // If it was a quota error, try a trimmed version (drop the heaviest derived arrays)
+    try {
+      const trimmed: ParsedSpotifyData = {
+        ...data,
+        artists: data.artists.map((a) => ({ ...a, songs: [] })),
+        albums: data.albums.map((al) => ({ ...al, songs: [] })),
+      };
+      localStorage.setItem(SPOTIFY_DATA_KEY, JSON.stringify(trimmed));
+      console.warn("[store] Saved trimmed Spotify data (artist/album song lists stripped)");
+      return true;
+    } catch {
+      console.error("[store] Trimmed save also failed — localStorage may be unavailable or full");
+      return false;
+    }
   }
 }
 

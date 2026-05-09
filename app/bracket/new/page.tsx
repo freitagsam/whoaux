@@ -45,12 +45,13 @@ export default function NewBracketPage() {
     if (mode === "liked") return data.likedSongs.length;
     if (mode === "top") return data.topSongs.length;
     if (mode === "artist") {
-      const a = data.artists.find((x) => x.name === filter);
-      return a?.songs.length ?? 0;
+      // Mirror bracket-generator.ts: filter data.songs by artist name
+      return data.songs.filter((s) => s.artist.toLowerCase() === filter.toLowerCase()).length;
     }
     if (mode === "album") {
+      // Mirror bracket-generator.ts: filter data.songs by album name
       const al = data.albums.find((x) => `${x.name}::${x.artist}` === filter);
-      return al?.songs.length ?? 0;
+      return al ? data.songs.filter((s) => s.album.toLowerCase() === al.name.toLowerCase()).length : 0;
     }
     return 0;
   };
