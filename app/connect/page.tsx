@@ -17,7 +17,7 @@ const syncSteps = [
   { label: "Top artists — 4 wks, 6 mo, all time", icon: User },
 ];
 
-const TIMEOUT_MS = 15000;
+const TIMEOUT_MS = 30000;
 
 export default function ConnectPage() {
   const { data: session, status } = useSession();

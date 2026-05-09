@@ -53,7 +53,7 @@ export interface SpotifyPlaylist {
   name: string;
   description?: string;
   images: Array<{ url: string }>;
-  tracks: { total: number };
+  tracks: { total: number } | null;
   uri: string;
 }
 
@@ -145,7 +145,7 @@ export interface ParsedSpotifyData {
 }
 
 // Bracket types
-export type BracketMode = "liked" | "artist" | "album" | "top";
+export type BracketMode = "liked" | "artist" | "album" | "top" | "playlist";
 export type SeedingMethod = "personal" | "artist_total";
 export type BracketSize = 8 | 16 | 32 | 64;
 

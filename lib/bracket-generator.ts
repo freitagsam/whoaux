@@ -37,6 +37,7 @@ export function generateBracket(
     seedingMethod: SeedingMethod;
     size: BracketSize;
     name: string;
+    playlistSongs?: ParsedSong[];
   }
 ): Bracket | null {
   let pool: ParsedSong[] = [];
@@ -57,6 +58,9 @@ export function generateBracket(
       break;
     case "top":
       pool = [...data.topSongs];
+      break;
+    case "playlist":
+      pool = [...(options.playlistSongs ?? [])];
       break;
   }
 

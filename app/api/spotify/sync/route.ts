@@ -87,6 +87,66 @@ function topArtistToParsed(artist: SpotifyTopArtist): ParsedArtist {
   };
 }
 
+// ─── Paginated fetchers ────────────────────────────────────────────────────
+
+async function fetchAllLikedSongs(
+  token: string,
+  max = 2000
+): Promise<Array<{ track: SpotifyTrack; added_at: string }>> {
+  const limit = 50;
+  const first = await spotifyGet<{
+    items: Array<{ track: SpotifyTrack | null; added_at: string }>;
+    total: number;
+  }>(`/me/tracks?limit=${limit}&offset=0`, token);
+
+  const items = first.items.filter(
+    (i): i is { track: SpotifyTrack; added_at: string } => !!i?.track?.id
+  );
+  if (first.total <= limit) return items;
+
+  const extraPages = Math.ceil((Math.min(first.total, max) - limit) / limit);
+  const pages = await Promise.all(
+    Array.from({ length: extraPages }, (_, i) =>
+      spotifyGet<{ items: Array<{ track: SpotifyTrack | null; added_at: string }> }>(
+        `/me/tracks?limit=${limit}&offset=${(i + 1) * limit}`,
+        token
+      ).catch(() => ({ items: [] as Array<{ track: SpotifyTrack | null; added_at: string }> }))
+    )
+  );
+  for (const page of pages) {
+    items.push(
+      ...page.items.filter(
+        (i): i is { track: SpotifyTrack; added_at: string } => !!i?.track?.id
+      )
+    );
+  }
+  return items.slice(0, max);
+}
+
+async function fetchAllPlaylists(token: string): Promise<SpotifyPlaylist[]> {
+  const limit = 50;
+  const first = await spotifyGet<{ items: SpotifyPlaylist[]; total: number }>(
+    `/me/playlists?limit=${limit}&offset=0`,
+    token
+  );
+  const items = first.items.filter((p) => !!p?.id);
+  if (first.total <= limit) return items;
+
+  const extraPages = Math.ceil((first.total - limit) / limit);
+  const pages = await Promise.all(
+    Array.from({ length: extraPages }, (_, i) =>
+      spotifyGet<{ items: SpotifyPlaylist[] }>(
+        `/me/playlists?limit=${limit}&offset=${(i + 1) * limit}`,
+        token
+      ).catch(() => ({ items: [] as SpotifyPlaylist[] }))
+    )
+  );
+  for (const page of pages) {
+    items.push(...page.items.filter((p) => !!p?.id));
+  }
+  return items;
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────
 
 export async function GET() {
@@ -127,18 +187,12 @@ export async function GET() {
       topArtistsMediumResult,
       topArtistsLongResult,
     ] = await Promise.allSettled([
-      spotifyGet<{ items: Array<{ track: SpotifyTrack | null; added_at: string }> }>(
-        "/me/tracks?limit=100",
-        token
-      ),
+      fetchAllLikedSongs(token),
       spotifyGet<{ items: Array<{ track: SpotifyTrack; played_at: string }> }>(
         "/me/player/recently-played?limit=50",
         token
       ),
-      spotifyGet<{ items: SpotifyPlaylist[] }>(
-        "/me/playlists?limit=50",
-        token
-      ),
+      fetchAllPlaylists(token),
       spotifyGet<SpotifyProfile>("/me", token),
       spotifyGet<{ items: SpotifyTrack[] }>(
         "/me/top/tracks?limit=50&time_range=short_term",
@@ -168,11 +222,7 @@ export async function GET() {
 
     // Graceful degradation — use whatever succeeded
     const likedItems =
-      likedResult.status === "fulfilled"
-        ? likedResult.value.items.filter(
-            (i): i is { track: SpotifyTrack; added_at: string } => !!i?.track?.id
-          )
-        : [];
+      likedResult.status === "fulfilled" ? likedResult.value : [];
 
     const recentItems =
       recentResult.status === "fulfilled"
@@ -180,9 +230,7 @@ export async function GET() {
         : [];
 
     const playlists: SpotifyPlaylist[] =
-      playlistsResult.status === "fulfilled"
-        ? playlistsResult.value.items.filter((p) => !!p?.id && !!p?.tracks)
-        : [];
+      playlistsResult.status === "fulfilled" ? playlistsResult.value : [];
 
     const profile =
       profileResult.status === "fulfilled" ? profileResult.value : null;
@@ -218,9 +266,9 @@ export async function GET() {
         : [];
 
     console.log("[spotify/sync] API results:", {
-      liked: likedResult.status === "fulfilled" ? likedResult.value.items.length : `FAILED: ${likedResult.reason}`,
+      liked: likedResult.status === "fulfilled" ? likedResult.value.length : `FAILED: ${likedResult.reason}`,
       recent: recentResult.status === "fulfilled" ? recentResult.value.items.length : `FAILED: ${recentResult.reason}`,
-      playlists: playlistsResult.status === "fulfilled" ? playlistsResult.value.items.length : `FAILED: ${playlistsResult.reason}`,
+      playlists: playlistsResult.status === "fulfilled" ? playlistsResult.value.length : `FAILED: ${playlistsResult.reason}`,
       profile: profileResult.status === "fulfilled" ? profileResult.value.display_name : `FAILED: ${profileResult.reason}`,
       topTracksMedium: topTracksMediumResult.status === "fulfilled" ? topTracksMediumResult.value.items.length : `FAILED: ${topTracksMediumResult.reason}`,
       topArtistsMedium: topArtistsMediumResult.status === "fulfilled" ? topArtistsMediumResult.value.items.length : `FAILED: ${topArtistsMediumResult.reason}`,

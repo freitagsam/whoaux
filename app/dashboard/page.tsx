@@ -10,7 +10,7 @@ import {
 import {
   Music, Trophy, Zap, TrendingUp, Clock, Upload,
   ChevronRight, Trash2, Play, Heart, ListMusic, Lock,
-  Headphones, Shuffle, SkipForward, Laptop, User, Star, RefreshCw,
+  Headphones, Shuffle, SkipForward, Laptop, User, Star, RefreshCw, ExternalLink,
 } from "lucide-react";
 import { loadSpotifyData, loadBrackets, deleteBracket, clearSpotifyData } from "@/lib/store";
 import { formatPlaytime, formatPlayCount } from "@/lib/spotify-parser";
@@ -25,7 +25,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<ParsedSpotifyData | null>(null);
   const [brackets, setBrackets] = useState<Bracket[]>([]);
-  const [tab, setTab] = useState<"overview" | "artists" | "songs" | "brackets">("overview");
+  const [tab, setTab] = useState<"overview" | "artists" | "songs" | "playlists" | "brackets">("overview");
   const [timeRange, setTimeRange] = useState<TimeRange>("medium");
 
   useEffect(() => {
@@ -327,10 +327,13 @@ export default function DashboardPage() {
           className="flex gap-1 p-1 rounded-xl mb-6 animate-fade-up delay-200 w-fit"
           style={{ background: "var(--bg-1)", border: "1px solid var(--border)" }}
         >
-          {(["overview", "artists", "songs", "brackets"] as const).map((t) => (
+          {(isOAuth
+            ? (["overview", "artists", "songs", "playlists", "brackets"] as const)
+            : (["overview", "artists", "songs", "brackets"] as const)
+          ).map((t) => (
             <button
               key={t}
-              onClick={() => setTab(t)}
+              onClick={() => setTab(t as typeof tab)}
               className="px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all"
               style={{
                 background: tab === t ? "var(--green)" : "transparent",
@@ -832,6 +835,90 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════ */}
+        {/* PLAYLISTS TAB                                                */}
+        {/* ════════════════════════════════════════════════════════════ */}
+        {tab === "playlists" && (
+          <div className="animate-fade-in">
+            {(!data.playlists || data.playlists.length === 0) ? (
+              <div
+                className="text-center py-16 rounded-2xl"
+                style={{ background: "var(--bg-1)", border: "1px dashed var(--border)" }}
+              >
+                <ListMusic size={28} style={{ color: "var(--text-muted)", margin: "0 auto 12px" }} />
+                <div className="font-semibold mb-1">No playlists found</div>
+                <div className="text-sm" style={{ color: "var(--text-dim)" }}>
+                  Re-sync your Spotify data to load playlists
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm" style={{ color: "var(--text-dim)" }}>
+                    {data.playlists.length} playlist{data.playlists.length !== 1 ? "s" : ""} in your library
+                  </p>
+                  <Link
+                    href="/bracket/new"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold"
+                    style={{ background: "var(--green)", color: "#000" }}
+                  >
+                    <Trophy size={13} />
+                    Bracket a Playlist
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {data.playlists.map((pl) => (
+                    <div
+                      key={pl.id}
+                      className="rounded-2xl overflow-hidden flex flex-col"
+                      style={{ background: "var(--bg-1)", border: "1px solid var(--border)" }}
+                    >
+                      <div
+                        className="aspect-square flex items-center justify-center"
+                        style={{ background: "var(--bg-3)" }}
+                      >
+                        {pl.images[0]?.url ? (
+                          <img
+                            src={pl.images[0].url}
+                            alt={pl.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <ListMusic size={28} style={{ color: "var(--text-muted)" }} />
+                        )}
+                      </div>
+                      <div className="p-3 flex flex-col flex-1">
+                        <div className="font-semibold text-sm truncate">{pl.name}</div>
+                        <div className="text-xs mt-0.5 mb-3" style={{ color: "var(--text-muted)" }}>
+                          {pl.tracks?.total ?? 0} tracks
+                        </div>
+                        <div className="flex gap-2 mt-auto">
+                          <Link
+                            href="/bracket/new"
+                            className="flex-1 py-1.5 rounded-lg text-xs font-bold text-center"
+                            style={{ background: "var(--green)", color: "#000" }}
+                          >
+                            Bracket
+                          </Link>
+                          <a
+                            href={`https://open.spotify.com/playlist/${pl.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center w-8 rounded-lg"
+                            style={{ background: "var(--bg-3)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
+                          >
+                            <ExternalLink size={11} />
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
