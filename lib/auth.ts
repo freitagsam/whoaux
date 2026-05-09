@@ -58,15 +58,29 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         params: { scope: SPOTIFY_SCOPES },
       },
-      // Override profile so Spotify's user ID is available in the JWT.
-      // The built-in provider doesn't expose `id` to the session.
-      profile(profile) {
-        return {
-          id: profile.id,
-          name: profile.display_name ?? profile.id,
-          email: profile.email,
-          image: profile.images?.[0]?.url ?? null,
-        };
+      // NextAuth calls /me once during OAuth callback with no retry.
+      // Spotify rate-limits this (429) after heavy API use, breaking login.
+      // Override with retry logic — cap wait at 2s so we never timeout on Vercel.
+      userinfo: {
+        url: "https://api.spotify.com/v1/me",
+        async request({ tokens }: { tokens: { access_token?: string } }) {
+          for (let attempt = 0; attempt < 4; attempt++) {
+            const res = await fetch("https://api.spotify.com/v1/me", {
+              headers: { Authorization: `Bearer ${tokens.access_token}` },
+            });
+            if (res.ok) return res.json();
+            if (res.status === 429) {
+              // Honor Retry-After but cap at 2s — 4 retries × 2s = 8s max, within Vercel timeout
+              const retryAfter = parseInt(res.headers.get("Retry-After") ?? "1", 10);
+              const waitMs = Math.min(retryAfter * 1000, 2000);
+              console.warn(`[auth] /me 429 — waiting ${waitMs}ms (attempt ${attempt + 1}/4)`);
+              await new Promise((r) => setTimeout(r, waitMs));
+              continue;
+            }
+            throw new Error(`Spotify /me returned ${res.status}`);
+          }
+          throw new Error("Spotify rate limit — please try again in a moment.");
+        },
       },
     }),
   ],
