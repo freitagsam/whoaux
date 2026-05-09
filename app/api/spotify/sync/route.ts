@@ -181,7 +181,7 @@ export async function GET() {
 
     const playlists: SpotifyPlaylist[] =
       playlistsResult.status === "fulfilled"
-        ? playlistsResult.value.items.filter(Boolean)
+        ? playlistsResult.value.items.filter((p) => !!p?.id && !!p?.tracks)
         : [];
 
     const profile =
