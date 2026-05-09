@@ -154,16 +154,26 @@ export default function NewBracketPage() {
             No Data Found
           </h2>
           <p className="mb-6" style={{ color: "var(--text-dim)" }}>
-            Upload your Spotify data first to create a bracket.
+            Connect your Spotify account or upload your data export to create a bracket.
           </p>
-          <button
-            onClick={() => router.push("/upload")}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold mx-auto"
-            style={{ background: "var(--green)", color: "#000" }}
-          >
-            Upload Data
-            <ArrowRight size={16} />
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={() => router.push("/connect")}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold"
+              style={{ background: "var(--green)", color: "#000" }}
+            >
+              Connect Spotify
+              <ArrowRight size={16} />
+            </button>
+            <button
+              onClick={() => router.push("/upload")}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium"
+              style={{ background: "var(--bg-2)", border: "1px solid var(--border)", color: "var(--text-dim)" }}
+            >
+              Upload Data
+              <ArrowRight size={16} />
+            </button>
+          </div>
         </div>
       </div>
     );

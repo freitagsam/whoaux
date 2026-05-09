@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Music2, Loader2, CheckCircle2, AlertCircle, Zap, Heart, ListMusic, X, RefreshCw, LayoutDashboard, TrendingUp, User } from "lucide-react";
-import { saveSpotifyData, loadSpotifyData } from "@/lib/store";
+import { saveSpotifyData, loadSpotifyData, clearSpotifyData } from "@/lib/store";
 import Navbar from "@/components/layout/Navbar";
 
 type SyncStatus = "idle" | "syncing" | "done" | "error" | "already_connected";
@@ -25,6 +25,7 @@ export default function ConnectPage() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [stepIdx, setStepIdx] = useState(0);
   const [error, setError] = useState("");
+  const [syncedSongs, setSyncedSongs] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const cancelledRef = useRef(false);
   const syncingRef = useRef(false);
@@ -61,8 +62,9 @@ export default function ConnectPage() {
       const data = await res.json();
       setStepIdx(syncSteps.length);
       saveSpotifyData(data);
+      setSyncedSongs(data.songs?.length ?? 0);
       setSyncStatus("done");
-      setTimeout(() => router.push("/dashboard"), 1200);
+      setTimeout(() => router.push("/dashboard"), 1800);
     } catch (e) {
       clearInterval(stepInterval);
       clearTimeout(timeout);
@@ -201,7 +203,7 @@ export default function ConnectPage() {
                   Go to Dashboard
                 </button>
                 <button
-                  onClick={() => { setSyncStatus("idle"); doSync(); }}
+                  onClick={() => { clearSpotifyData(); setSyncStatus("idle"); doSync(); }}
                   className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-medium"
                   style={{ background: "var(--bg-2)", border: "1px solid var(--border)", color: "var(--text-dim)" }}
                 >
@@ -270,7 +272,10 @@ export default function ConnectPage() {
               <h2 className="text-4xl mb-2" style={{ fontFamily: "Bebas Neue, sans-serif" }}>
                 <span className="gradient-text">All synced!</span>
               </h2>
-              <p style={{ color: "var(--text-dim)" }}>Heading to your dashboard...</p>
+              <p className="mb-1" style={{ color: "var(--text-dim)" }}>
+                {syncedSongs > 0 ? `${syncedSongs.toLocaleString()} songs imported` : "Library synced"}
+              </p>
+              <p className="text-sm" style={{ color: "var(--text-muted)" }}>Heading to your dashboard...</p>
             </div>
           )}
 

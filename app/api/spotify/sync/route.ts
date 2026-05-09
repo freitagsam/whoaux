@@ -218,12 +218,14 @@ export async function GET() {
         : [];
 
     if (process.env.NODE_ENV === "development") {
-      if (likedResult.status === "rejected") console.error("Liked songs failed:", likedResult.reason);
-      if (recentResult.status === "rejected") console.error("Recently played failed:", recentResult.reason);
-      if (playlistsResult.status === "rejected") console.error("Playlists failed:", playlistsResult.reason);
-      if (profileResult.status === "rejected") console.error("Profile failed:", profileResult.reason);
-      if (topTracksMediumResult.status === "rejected") console.error("Top tracks failed:", topTracksMediumResult.reason);
-      if (topArtistsMediumResult.status === "rejected") console.error("Top artists failed:", topArtistsMediumResult.reason);
+      console.log("[spotify/sync] API results:", {
+        liked: likedResult.status === "fulfilled" ? likedResult.value.items.length : `FAILED: ${likedResult.reason}`,
+        recent: recentResult.status === "fulfilled" ? recentResult.value.items.length : `FAILED: ${recentResult.reason}`,
+        playlists: playlistsResult.status === "fulfilled" ? playlistsResult.value.items.length : `FAILED: ${playlistsResult.reason}`,
+        profile: profileResult.status === "fulfilled" ? profileResult.value.display_name : `FAILED: ${profileResult.reason}`,
+        topTracksMedium: topTracksMediumResult.status === "fulfilled" ? topTracksMediumResult.value.items.length : `FAILED: ${topTracksMediumResult.reason}`,
+        topArtistsMedium: topArtistsMediumResult.status === "fulfilled" ? topArtistsMediumResult.value.items.length : `FAILED: ${topArtistsMediumResult.reason}`,
+      });
     }
 
     // Need at least liked OR recently played OR top tracks to do anything useful
@@ -281,7 +283,19 @@ export async function GET() {
       });
     }
 
-    const allSongs = [...likedSongs, ...recentExtra].sort((a, b) => b.playCount - a.playCount);
+    const allSongs = [...likedSongs, ...recentExtra];
+
+    // Supplement with Spotify top tracks not already in the pool.
+    // Ensures artists/albums are always populated even when liked songs / recently
+    // played APIs fail or the user has an empty library.
+    const allSongsUriSet = new Set(allSongs.map((s) => s.uri));
+    for (const track of [...topTracksMedium, ...topTracksShort, ...topTracksLong]) {
+      if (!allSongsUriSet.has(track.uri)) {
+        allSongsUriSet.add(track.uri);
+        allSongs.push(trackToSong(track));
+      }
+    }
+    allSongs.sort((a, b) => b.playCount - a.playCount);
 
     // ── Build artist map from liked + recently played ──────────────────────
     const artistMap = new Map<string, ParsedArtist>();
@@ -388,6 +402,18 @@ export async function GET() {
           }
         : undefined,
     };
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("[spotify/sync] Built result:", {
+        songs: result.songs.length,
+        likedSongs: result.likedSongs.length,
+        topSongs: result.topSongs.length,
+        artists: result.artists.length,
+        albums: result.albums.length,
+        playlists: result.playlists?.length ?? 0,
+        recentlyPlayed: result.recentlyPlayed?.length ?? 0,
+      });
+    }
 
     return NextResponse.json(result);
   } catch (err) {
