@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Heart, User, Disc3, TrendingUp, ArrowRight, ArrowLeft,
-  Trophy, Zap, Users, Music, ChevronDown, Search
+  Trophy, Zap, Users, Music, ChevronDown, Search, AlertCircle
 } from "lucide-react";
-import { loadSpotifyData, saveBracket } from "@/lib/store";
+import { loadSpotifyData, saveBracket, clearSpotifyData } from "@/lib/store";
 import { generateBracket, getValidBracketSize } from "@/lib/bracket-generator";
 import { ParsedSpotifyData, BracketMode, SeedingMethod, BracketSize } from "@/types/spotify";
 import Navbar from "@/components/layout/Navbar";
@@ -111,7 +111,7 @@ export default function NewBracketPage() {
       return !!filter;
     }
     if (step === "seeding") return true;
-    if (step === "size") return true;
+    if (step === "size") return getPoolSize() >= 4;
     return false;
   };
 
@@ -207,6 +207,26 @@ export default function NewBracketPage() {
             ))}
           </div>
         </div>
+
+        {/* Stale-data banner */}
+        {data.dataSource === "oauth" && data.songs.length === 0 && (
+          <div
+            className="rounded-xl p-4 mb-6 flex items-center gap-3 text-sm"
+            style={{ background: "rgba(255,107,53,0.08)", border: "1px solid rgba(255,107,53,0.25)", color: "#ff9966" }}
+          >
+            <AlertCircle size={16} style={{ flexShrink: 0 }} />
+            <div>
+              Your synced data is incomplete.{" "}
+              <button
+                onClick={() => { clearSpotifyData(); router.push("/connect"); }}
+                style={{ color: "var(--green)", textDecoration: "underline" }}
+              >
+                Re-sync Spotify
+              </button>
+              {" "}to unlock Artist and Album brackets.
+            </div>
+          </div>
+        )}
 
         {/* Step: Mode */}
         {step === "mode" && (
@@ -401,9 +421,29 @@ export default function NewBracketPage() {
         {step === "size" && (
           <div className="animate-scale-in">
             <h2 className="text-2xl font-semibold mb-2">Choose bracket size</h2>
-            <p className="text-sm mb-6" style={{ color: "var(--text-dim)" }}>
+            <p className="text-sm mb-4" style={{ color: "var(--text-dim)" }}>
               Pool has {getPoolSize()} eligible songs. Max bracket: {getMaxSize()}.
             </p>
+
+            {getPoolSize() < 4 && (
+              <div
+                className="rounded-xl p-4 mb-6 flex items-center gap-3 text-sm"
+                style={{ background: "rgba(255,68,68,0.07)", border: "1px solid rgba(255,68,68,0.2)", color: "#ff8080" }}
+              >
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <div>
+                  Not enough songs to build a bracket (need at least 4).{" "}
+                  {data.dataSource === "oauth" && (
+                    <button
+                      onClick={() => { clearSpotifyData(); router.push("/connect"); }}
+                      style={{ color: "var(--green)", textDecoration: "underline" }}
+                    >
+                      Re-sync Spotify
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3 mb-8">
               {BRACKET_SIZES.map((s) => {

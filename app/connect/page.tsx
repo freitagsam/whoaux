@@ -105,8 +105,7 @@ export default function ConnectPage() {
       const existingData = loadSpotifyData();
       if (existingData) {
         // If stored data has no songs at all it's a broken/incomplete sync — re-sync automatically
-        const isEmpty = existingData.songs.length === 0 &&
-          (!existingData.topSongs || existingData.topSongs.length === 0);
+        const isEmpty = existingData.songs.length === 0;
         if (isEmpty) {
           clearSpotifyData();
           doSync();

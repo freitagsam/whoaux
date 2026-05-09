@@ -62,7 +62,9 @@ function SongCard({
               style={{ background: "var(--bg-3)", color: "var(--text-dim)" }}
             >
               <Zap size={9} />
-              {song.playCount.toLocaleString()} plays
+              {song.popularity !== undefined
+                ? `${song.popularity} popularity`
+                : `${song.playCount.toLocaleString()} plays`}
             </span>
           </div>
         </div>
@@ -264,7 +266,9 @@ export default function BracketPage({ params }: BracketPageProps) {
                 }}
               >
                 <Zap size={12} />
-                {bracket.winner.playCount.toLocaleString()} personal plays · Seed #{bracket.winner.seed}
+                {bracket.winner.popularity !== undefined
+                  ? `${bracket.winner.popularity} popularity`
+                  : `${bracket.winner.playCount.toLocaleString()} personal plays`} · Seed #{bracket.winner.seed}
               </div>
 
               <div className="flex flex-wrap gap-3 mt-8 justify-center">
