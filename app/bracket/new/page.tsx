@@ -98,10 +98,13 @@ export default function NewBracketPage() {
     `${a.name} ${a.artist}`.toLowerCase().includes(search.toLowerCase())
   ).slice(0, 20) ?? [];
 
+  const [playlistRestricted, setPlaylistRestricted] = useState(false);
+
   const handlePlaylistSelect = async (playlistId: string) => {
     setFilter(playlistId);
     setLoadingPlaylist(true);
     setPlaylistSongs([]);
+    setPlaylistRestricted(false);
     try {
       const res = await fetch(`/api/spotify/playlist-tracks?id=${playlistId}`);
       const json = await res.json();
@@ -109,6 +112,7 @@ export default function NewBracketPage() {
         toast.error(json.error ?? "Failed to load playlist tracks.");
         return;
       }
+      if (json.restricted) setPlaylistRestricted(true);
       setPlaylistSongs(json.songs ?? []);
     } catch {
       toast.error("Failed to load playlist tracks.");
@@ -526,7 +530,9 @@ export default function NewBracketPage() {
                 className="mt-3 rounded-xl p-3 text-xs leading-relaxed"
                 style={{ background: "rgba(255,68,68,0.07)", border: "1px solid rgba(255,68,68,0.2)", color: "#ff8080" }}
               >
-                No playable Spotify tracks found in this playlist. It may contain only local files, podcast episodes, or deleted tracks. Try a different playlist.
+                {playlistRestricted
+                  ? "Spotify denied access to this playlist. Try signing out and back in to refresh your permissions, or choose a different playlist."
+                  : "No playable Spotify tracks found in this playlist. It may contain only local files, podcast episodes, or deleted tracks. Try a different playlist."}
               </div>
             )}
 

@@ -78,13 +78,11 @@ export async function GET(request: NextRequest) {
       console.log(`[artist-catalog] Found: "${artistName}" id=${id}`);
     }
 
-    // Commas in include_groups must be literal (URLSearchParams encodes them as %2C which
-    // Spotify's parser rejects, producing a misleading "Invalid limit" 400 error).
-    // market is intentionally omitted — it's optional on this endpoint and from_token
-    // causes 400 on some Spotify accounts.
-    const limit = 20;
-    const albumQs = (offset: number) =>
-      `include_groups=album,single,compilation&limit=${limit}&offset=${offset}`;
+    // Fetch all album types — omitting include_groups because passing comma-separated
+    // values triggers a Spotify 400 "Invalid limit" regardless of the limit value
+    // (their parser misreads the commas as delimiters). We filter appears_on locally.
+    const limit = 50;
+    const albumQs = (offset: number) => `limit=${limit}&offset=${offset}`;
 
     const first = await spotifyGet<{ items: SpotifyAlbum[]; total: number }>(
       `/artists/${id}/albums?${albumQs(0)}`,
@@ -110,9 +108,11 @@ export async function GET(request: NextRequest) {
       for (const page of pages) albums.push(...(page.items ?? []));
     }
 
-    // Deduplicate by lowercased name (keep first = usually the original release)
+    // Filter out "appears_on" entries (features on other artists' releases)
+    // then deduplicate by lowercased name (keep first = usually the original release)
     const seen = new Set<string>();
     const deduped = albums.filter((a) => {
+      if (a.album_type === "appears_on") return false;
       const key = a.name.toLowerCase().trim();
       if (seen.has(key)) return false;
       seen.add(key);

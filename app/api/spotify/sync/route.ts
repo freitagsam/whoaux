@@ -284,12 +284,11 @@ export async function GET() {
     // Only include playlists the user owns — followed/Spotify-generated ones return 403
     // on track fetching, and we want the playlist list to only show actionable items.
     const userId = profileResult.status === "fulfilled" ? profileResult.value.id : null;
-    const playlists: SpotifyPlaylist[] =
-      playlistsResult.status === "fulfilled"
-        ? userId
-          ? playlistsResult.value.filter((pl) => pl.ownerId === userId)
-          : playlistsResult.value
-        : [];
+    const allFetchedPlaylists = playlistsResult.status === "fulfilled" ? playlistsResult.value : [];
+    const playlists: SpotifyPlaylist[] = userId
+      ? allFetchedPlaylists.filter((pl) => pl.ownerId === userId)
+      : allFetchedPlaylists;
+    console.log(`[spotify/sync] userId=${userId ?? "unknown"} playlists: ${allFetchedPlaylists.length} total → ${playlists.length} owned`);
 
     const profile =
       profileResult.status === "fulfilled" ? profileResult.value : null;

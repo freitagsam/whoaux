@@ -21,14 +21,21 @@ interface PlaylistItem {
   track: SpotifyTrack | null;
 }
 
+class SpotifyForbiddenError extends Error {
+  constructor() { super("forbidden"); this.name = "SpotifyForbiddenError"; }
+}
+
 async function spotifyGet<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`https://api.spotify.com/v1${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
   if (res.status === 401) throw new Error("Spotify token expired — please re-sync.");
-  if (res.status === 403) throw new Error("Access denied for this playlist. Make sure it's your own playlist.");
-  if (!res.ok) throw new Error(`Spotify error ${res.status} on ${path}`);
+  if (res.status === 403) throw new SpotifyForbiddenError();
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Spotify ${res.status} on ${path}${body ? ": " + body.slice(0, 200) : ""}`);
+  }
   return res.json();
 }
 
@@ -45,6 +52,9 @@ export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+  if (session.error) {
+    return NextResponse.json({ error: "Spotify session expired — please re-sync." }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -94,6 +104,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ songs });
   } catch (err) {
+    if (err instanceof SpotifyForbiddenError) {
+      // 403 = restricted playlist (Spotify-generated, private without scope, etc.)
+      // Return empty songs with 200 so the UI shows "0 loaded" instead of an error toast.
+      console.warn(`[playlist-tracks] 403 forbidden for playlist ${id} — returning empty`);
+      return NextResponse.json({ songs: [], restricted: true });
+    }
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("[playlist-tracks] Error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
