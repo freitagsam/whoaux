@@ -130,6 +130,13 @@ async function fetchAllPlaylists(token: string): Promise<SpotifyPlaylist[]> {
     token
   );
   const items = first.items.filter((p) => !!p?.id);
+
+  console.log("[spotify/sync] Playlists sample (first 3):", items.slice(0, 3).map(p => ({
+    name: p.name,
+    tracks: p.tracks,
+    id: p.id,
+  })));
+
   if (first.total <= limit) return items;
 
   const extraPages = Math.ceil((first.total - limit) / limit);

@@ -231,7 +231,7 @@ export default function NewBracketPage() {
     if (step === "mode") return true;
     if (step === "filter") {
       if (mode === "top" || mode === "liked") return true;
-      if (mode === "playlist") return !!filter && !loadingPlaylist;
+      if (mode === "playlist") return !!filter && !loadingPlaylist && playlistSongs.length >= 4;
       if (mode === "artist") {
         if (!filter) return false;
         if (artistSource === "library") return true;
@@ -509,10 +509,24 @@ export default function NewBracketPage() {
                           {playlistSongs.length} loaded
                         </span>
                       )}
+                      {filter === pl.id && !loadingPlaylist && playlistSongs.length === 0 && (
+                        <span className="text-xs flex-shrink-0" style={{ color: "#ff8080" }}>
+                          0 loaded
+                        </span>
+                      )}
                     </button>
                   ))
               }
             </div>
+
+            {mode === "playlist" && filter && !loadingPlaylist && playlistSongs.length === 0 && (
+              <div
+                className="mt-3 rounded-xl p-3 text-xs leading-relaxed"
+                style={{ background: "rgba(255,68,68,0.07)", border: "1px solid rgba(255,68,68,0.2)", color: "#ff8080" }}
+              >
+                No playable Spotify tracks found in this playlist. It may contain only local files, podcast episodes, or deleted tracks. Try a different playlist.
+              </div>
+            )}
 
             {mode === "artist" && filter && (
               <div className="mt-4">

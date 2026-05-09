@@ -35,7 +35,7 @@ async function fetchAlbumTracks(
 ): Promise<SimpleTrack[]> {
   const limit = 50;
   const first = await spotifyGet<{ items: SimpleTrack[]; total: number }>(
-    `/albums/${albumId}/tracks?limit=${limit}&offset=0`,
+    `/albums/${albumId}/tracks?market=from_token&limit=${limit}&offset=0`,
     token
   );
   const items = [...first.items];
@@ -44,7 +44,7 @@ async function fetchAlbumTracks(
     const pages = await Promise.all(
       Array.from({ length: extraPages }, (_, i) =>
         spotifyGet<{ items: SimpleTrack[] }>(
-          `/albums/${albumId}/tracks?limit=${limit}&offset=${(i + 1) * limit}`,
+          `/albums/${albumId}/tracks?market=from_token&limit=${limit}&offset=${(i + 1) * limit}`,
           token
         ).catch(() => ({ items: [] as SimpleTrack[] }))
       )

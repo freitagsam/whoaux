@@ -28,9 +28,9 @@ async function spotifyGet<T>(path: string, token: string): Promise<T> {
 }
 
 async function searchArtist(name: string, token: string): Promise<SpotifyArtist | null> {
-  const q = encodeURIComponent(`"${name}"`);
+  const q = encodeURIComponent(name);
   const res = await spotifyGet<{ artists: { items: SpotifyArtist[] } }>(
-    `/search?q=${q}&type=artist&limit=5`,
+    `/search?q=${q}&type=artist&limit=10&market=from_token`,
     token
   );
   // Prefer exact name match
@@ -69,10 +69,11 @@ export async function GET(request: NextRequest) {
       artistName = found.name;
     }
 
-    // Fetch all albums (paginated)
+    // Fetch all albums (paginated). market=from_token required by Spotify to
+    // avoid 400 errors on content-availability endpoints.
     const limit = 50;
     const first = await spotifyGet<{ items: SpotifyAlbum[]; total: number }>(
-      `/artists/${id}/albums?include_groups=album,single,compilation&limit=${limit}&offset=0`,
+      `/artists/${id}/albums?include_groups=album,single,compilation&market=from_token&limit=${limit}&offset=0`,
       token
     );
 
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
       const pages = await Promise.all(
         Array.from({ length: extraPages }, (_, i) =>
           spotifyGet<{ items: SpotifyAlbum[] }>(
-            `/artists/${id}/albums?include_groups=album,single,compilation&limit=${limit}&offset=${(i + 1) * limit}`,
+            `/artists/${id}/albums?include_groups=album,single,compilation&market=from_token&limit=${limit}&offset=${(i + 1) * limit}`,
             token
           ).catch(() => ({ items: [] as SpotifyAlbum[] }))
         )
