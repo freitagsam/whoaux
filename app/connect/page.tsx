@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Music2, Loader2, CheckCircle2, AlertCircle, Zap, Heart, ListMusic, X, RefreshCw, LayoutDashboard, TrendingUp, User } from "lucide-react";
 import { saveSpotifyData, loadSpotifyData, clearSpotifyData } from "@/lib/store";
 import Navbar from "@/components/layout/Navbar";
@@ -22,6 +22,8 @@ const TIMEOUT_MS = 30000;
 export default function ConnectPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const oauthError = searchParams.get("error");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [stepIdx, setStepIdx] = useState(0);
   const [error, setError] = useState("");
@@ -135,6 +137,17 @@ export default function ConnectPage() {
           {/* Not signed in */}
           {status !== "authenticated" && status !== "loading" && (
             <div className="animate-fade-up">
+              {oauthError && (
+                <div
+                  className="rounded-xl p-4 mb-6 text-sm text-left leading-relaxed"
+                  style={{ background: "rgba(255,68,68,0.08)", border: "1px solid rgba(255,68,68,0.25)", color: "#ff8080" }}
+                >
+                  <strong>Sign-in failed.</strong>{" "}
+                  {oauthError === "OAuthCallbackError"
+                    ? "Spotify returned an error during login — this is usually a temporary rate limit. Wait 30 seconds and try again."
+                    : `Error: ${oauthError}. Try signing in again.`}
+                </div>
+              )}
               <div
                 className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 animate-pulse-glow"
                 style={{ background: "rgba(29,185,84,0.12)", border: "2px solid var(--green)" }}

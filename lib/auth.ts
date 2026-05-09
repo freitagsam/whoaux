@@ -12,25 +12,6 @@ export const SPOTIFY_SCOPES = [
   "user-read-private",
 ].join(" ");
 
-// Spotify's userinfo endpoint with retry on 429.
-// NextAuth calls this during OAuth callback with no retry — one 429 kills login.
-async function fetchSpotifyProfile(accessToken: string): Promise<Record<string, unknown>> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const res = await fetch("https://api.spotify.com/v1/me", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (res.status === 429) {
-      const retryAfter = parseInt(res.headers.get("Retry-After") ?? "3", 10);
-      console.warn(`[auth] Spotify userinfo 429 — waiting ${retryAfter}s (attempt ${attempt + 1})`);
-      await new Promise((r) => setTimeout(r, (retryAfter + 1) * 1000));
-      continue;
-    }
-    if (!res.ok) throw new Error(`Spotify /me returned ${res.status}`);
-    return res.json();
-  }
-  throw new Error("Spotify is rate-limiting sign-in — please try again in 30 seconds.");
-}
-
 async function refreshAccessToken(token: {
   access_token?: string;
   refresh_token?: string;
@@ -77,18 +58,14 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         params: { scope: SPOTIFY_SCOPES },
       },
-      userinfo: {
-        url: "https://api.spotify.com/v1/me",
-        async request({ tokens }) {
-          return fetchSpotifyProfile(tokens.access_token as string);
-        },
-      },
+      // Override profile so Spotify's user ID is available in the JWT.
+      // The built-in provider doesn't expose `id` to the session.
       profile(profile) {
         return {
-          id: profile.id as string,
-          name: (profile.display_name as string) ?? (profile.id as string),
-          email: profile.email as string,
-          image: (profile.images as Array<{ url: string }>)?.[0]?.url ?? null,
+          id: profile.id,
+          name: profile.display_name ?? profile.id,
+          email: profile.email,
+          image: profile.images?.[0]?.url ?? null,
         };
       },
     }),
@@ -113,10 +90,8 @@ export const authOptions: NextAuthOptions = {
       return refreshAccessToken(token);
     },
     async session({ session, token }) {
-      // Pass access token and any error down to the client session
       session.accessToken = token.access_token;
       session.error = token.error;
-      // Ensure user fields come from the JWT, not just the default provider
       if (token.name) session.user.name = token.name as string;
       if (token.email) session.user.email = token.email as string;
       if (token.picture) session.user.image = token.picture as string;
