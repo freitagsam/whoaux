@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { Trophy, ChevronRight, RotateCcw, BarChart3, Share2, Music, Zap } from "lucide-react";
