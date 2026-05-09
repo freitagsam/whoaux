@@ -18,28 +18,36 @@ export const metadata: Metadata = {
   },
 };
 
+const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const inner = (
+    <html lang="en" className={`${dmSans.variable} dark`} suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="min-h-screen flex flex-col antialiased">
+        <div className="scan-line" />
+        {children}
+        <Toaster theme="dark" position="bottom-right" />
+      </body>
+    </html>
+  );
+
+  if (!publishableKey) return inner;
+
   return (
-    <ClerkProvider>
-      <html lang="en" className={`${dmSans.variable} dark`} suppressHydrationWarning>
-        <head>
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-          <link
-            href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap"
-            rel="stylesheet"
-          />
-        </head>
-        <body className="min-h-screen flex flex-col antialiased">
-          <div className="scan-line" />
-          {children}
-          <Toaster theme="dark" position="bottom-right" />
-        </body>
-      </html>
+    <ClerkProvider publishableKey={publishableKey}>
+      {inner}
     </ClerkProvider>
   );
 }
