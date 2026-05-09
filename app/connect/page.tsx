@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useUser, useClerk, useSignIn } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/use-auth";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Music2, Loader2, CheckCircle2, AlertCircle, Zap, Heart, ListMusic, X, RefreshCw, LayoutDashboard, TrendingUp, User } from "lucide-react";
 import { saveSpotifyData, loadSpotifyData, clearSpotifyData } from "@/lib/store";
 import Navbar from "@/components/layout/Navbar";
@@ -20,10 +20,9 @@ const syncSteps = [
 const TIMEOUT_MS = 30000;
 
 export default function ConnectPage() {
-  const { isLoaded, isSignedIn } = useUser();
-  const { signOut } = useClerk();
-  const { signIn } = useSignIn();
+  const { isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [stepIdx, setStepIdx] = useState(0);
   const [error, setError] = useState("");
@@ -82,7 +81,7 @@ export default function ConnectPage() {
 
       if ((e as Error).name === "AbortError") {
         setError(
-          "Timed out waiting for Spotify. Make sure SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, CLERK_SECRET_KEY, and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY are set in your environment, then redeploy."
+          "Timed out waiting for Spotify. Make sure SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are set in your environment, then redeploy."
         );
       } else {
         setError((e as Error).message || "Something went wrong — check the server logs for details.");
@@ -91,12 +90,13 @@ export default function ConnectPage() {
     }
   }, [router]);
 
-  const handleCancel = useCallback(async () => {
+  const handleCancel = useCallback(() => {
     cancelledRef.current = true;
     syncingRef.current = false;
     abortRef.current?.abort();
-    await signOut({ redirectUrl: "/" });
-  }, [signOut]);
+    clearSpotifyData();
+    router.push("/api/auth/logout");
+  }, [router]);
 
   const handleRetry = useCallback(() => {
     syncingRef.current = false;
@@ -104,17 +104,27 @@ export default function ConnectPage() {
     doSync();
   }, [doSync]);
 
-  const handleSpotifySignIn = useCallback(async () => {
-    await signIn?.authenticateWithRedirect({
-      strategy: "oauth_spotify",
-      redirectUrl: "/sso-callback",
-      redirectUrlComplete: "/connect",
-    });
-  }, [signIn]);
+  // Check for OAuth error from callback redirect
+  useEffect(() => {
+    const oauthError = searchParams.get("error");
+    if (oauthError) {
+      const messages: Record<string, string> = {
+        access_denied: "You denied access to Spotify. Click below to try again.",
+        invalid_state: "Authentication state mismatch. Please try again.",
+        token_exchange_failed: "Failed to exchange Spotify auth code. Check your SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET.",
+        no_code: "No authorization code received from Spotify.",
+        unexpected: "An unexpected error occurred during authentication.",
+      };
+      setError(messages[oauthError] ?? `OAuth error: ${oauthError}`);
+      setSyncStatus("error");
+    }
+  }, [searchParams]);
 
   // Auto-sync once auth is confirmed
   useEffect(() => {
     if (!isLoaded || hasCheckedRef.current) return;
+    // Don't auto-sync if there's already an error from the URL
+    if (searchParams.get("error")) return;
     hasCheckedRef.current = true;
 
     if (isSignedIn) {
@@ -131,9 +141,9 @@ export default function ConnectPage() {
         doSync();
       }
     }
-  }, [isLoaded, isSignedIn, doSync]);
+  }, [isLoaded, isSignedIn, doSync, searchParams]);
 
-  const showSignIn = isLoaded && !isSignedIn;
+  const showSignIn = isLoaded && !isSignedIn && syncStatus !== "error";
   const showSpinner = !isLoaded || (isSignedIn && syncStatus === "idle");
 
   return (
@@ -176,8 +186,8 @@ export default function ConnectPage() {
                 ))}
               </div>
 
-              <button
-                onClick={handleSpotifySignIn}
+              <a
+                href="/api/auth/login"
                 className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-bold text-base animate-pulse-glow"
                 style={{ background: "var(--green)", color: "#000" }}
               >
@@ -185,7 +195,7 @@ export default function ConnectPage() {
                   <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
                 </svg>
                 Continue with Spotify
-              </button>
+              </a>
 
               <p className="mt-4 text-xs" style={{ color: "var(--text-muted)" }}>
                 We only read your data — we never modify your Spotify account.
@@ -321,13 +331,22 @@ export default function ConnectPage() {
                 {error}
               </div>
               <div className="flex gap-3 justify-center">
-                <button
-                  onClick={handleRetry}
+                <a
+                  href="/api/auth/login"
                   className="px-6 py-3 rounded-xl font-bold"
                   style={{ background: "var(--green)", color: "#000" }}
                 >
                   Try Again
-                </button>
+                </a>
+                {isSignedIn && (
+                  <button
+                    onClick={handleRetry}
+                    className="px-6 py-3 rounded-xl font-bold"
+                    style={{ background: "var(--bg-2)", border: "1px solid var(--border)", color: "var(--text-dim)" }}
+                  >
+                    Retry Sync
+                  </button>
+                )}
                 <button
                   onClick={handleCancel}
                   className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium"

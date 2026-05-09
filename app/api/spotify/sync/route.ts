@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getSpotifyToken } from "@/lib/spotify-auth";
 import {
   ParsedArtist,
   ParsedAlbum,
@@ -200,21 +200,9 @@ async function fetchAllPlaylists(token: string): Promise<SpotifyPlaylist[]> {
 
 // ─── Route handler ────────────────────────────────────────────────────────
 
-export async function GET() {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-  }
-
-  const clerk = await clerkClient();
-  const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "oauth_spotify");
-  const token = tokenResponse.data[0]?.token;
-  if (!token) {
-    return NextResponse.json(
-      { error: "Spotify not connected — please sign out and sign back in with Spotify." },
-      { status: 401 }
-    );
-  }
+export async function GET(request: NextRequest) {
+  const { token, errorResponse, setCookies } = await getSpotifyToken(request);
+  if (!token) return errorResponse!;
 
   try {
     // Run all 10 Spotify API calls in parallel
@@ -514,7 +502,9 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json(result);
+    const response = NextResponse.json(result);
+    setCookies(response);
+    return response;
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("Spotify sync error:", msg);

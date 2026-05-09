@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { getSpotifyToken } from "@/lib/spotify-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -39,18 +39,12 @@ async function searchArtist(name: string, token: string): Promise<SpotifyArtist 
     token
   );
   const items = res.artists?.items ?? [];
-  // Prefer exact name match, fall back to first result
   return items.find((a) => a.name.toLowerCase() === name.toLowerCase()) ?? items[0] ?? null;
 }
 
 export async function GET(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-
-  const clerk = await clerkClient();
-  const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "oauth_spotify");
-  const token = tokenResponse.data[0]?.token;
-  if (!token) return NextResponse.json({ error: "Spotify not connected — please sign in again." }, { status: 401 });
+  const { token, errorResponse, setCookies } = await getSpotifyToken(request);
+  if (!token) return errorResponse!;
 
   const { searchParams } = new URL(request.url);
   const name = searchParams.get("name");
@@ -75,9 +69,6 @@ export async function GET(request: NextRequest) {
       console.log(`[artist-catalog] Found: "${artistName}" id=${id}`);
     }
 
-    // Fetch all album types — omitting include_groups because passing comma-separated
-    // values triggers a Spotify 400 "Invalid limit" regardless of the limit value
-    // (their parser misreads the commas as delimiters). We filter appears_on locally.
     const limit = 50;
     const albumQs = (offset: number) => `limit=${limit}&offset=${offset}`;
 
@@ -105,8 +96,6 @@ export async function GET(request: NextRequest) {
       for (const page of pages) albums.push(...(page.items ?? []));
     }
 
-    // Filter out "appears_on" entries (features on other artists' releases)
-    // then deduplicate by lowercased name (keep first = usually the original release)
     const seen = new Set<string>();
     const deduped = albums.filter((a) => {
       if (a.album_type === "appears_on") return false;
@@ -118,7 +107,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`[artist-catalog] Returning ${deduped.length} unique albums for "${artistName}"`);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       artistId: id,
       artistName,
       albums: deduped.map((a) => ({
@@ -130,6 +119,8 @@ export async function GET(request: NextRequest) {
         image: a.images?.[0]?.url ?? null,
       })),
     });
+    setCookies(response);
+    return response;
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("[artist-catalog] Error:", msg);

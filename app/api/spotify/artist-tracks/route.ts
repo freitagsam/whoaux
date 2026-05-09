@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { getSpotifyToken } from "@/lib/spotify-auth";
 import { ParsedSong } from "@/types/spotify";
 
 export const dynamic = "force-dynamic";
@@ -53,13 +53,8 @@ async function fetchAlbumTracks(albumId: string, token: string): Promise<SimpleT
 }
 
 export async function GET(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-
-  const clerk = await clerkClient();
-  const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "oauth_spotify");
-  const token = tokenResponse.data[0]?.token;
-  if (!token) return NextResponse.json({ error: "Spotify not connected — please sign in again." }, { status: 401 });
+  const { token, errorResponse, setCookies } = await getSpotifyToken(request);
+  if (!token) return errorResponse!;
 
   const { searchParams } = new URL(request.url);
   const albumIdsParam = searchParams.get("albumIds");
@@ -71,12 +66,10 @@ export async function GET(request: NextRequest) {
   const albumNames = albumNamesParam.split("|||");
 
   try {
-    // Fetch all album tracks in parallel
     const albumTrackSets = await Promise.all(
       albumIds.map((id) => fetchAlbumTracks(id, token).catch(() => [] as SimpleTrack[]))
     );
 
-    // Flatten + deduplicate by URI
     const seenUris = new Set<string>();
     const allTracks: (SimpleTrack & { albumName: string })[] = [];
     for (let i = 0; i < albumTrackSets.length; i++) {
@@ -89,7 +82,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Batch-fetch full track objects for popularity scores (50 per request)
     const trackIds = allTracks.map((t) => t.id);
     const popularityMap = new Map<string, number>();
     for (let i = 0; i < trackIds.length; i += 50) {
@@ -120,7 +112,9 @@ export async function GET(request: NextRequest) {
     }));
 
     console.log(`[artist-tracks] albums=${albumIds.length} tracks=${songs.length}`);
-    return NextResponse.json({ songs });
+    const response = NextResponse.json({ songs });
+    setCookies(response);
+    return response;
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("[artist-tracks] Error:", msg);

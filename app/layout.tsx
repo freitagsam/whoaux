@@ -2,12 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
-import { ClerkProvider } from "@clerk/nextjs";
 
-// Force every route to render at request time — never prerender.
-// This is correct: all pages are auth-aware and show personalised data.
-// It also avoids ClerkProvider crashing at build time when env vars are
-// evaluated before Vercel injects them into the build environment.
 export const dynamic = "force-dynamic";
 
 const dmSans = DM_Sans({
@@ -30,22 +25,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-      <html lang="en" className={`${dmSans.variable} dark`} suppressHydrationWarning>
-        <head>
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-          <link
-            href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap"
-            rel="stylesheet"
-          />
-        </head>
-        <body className="min-h-screen flex flex-col antialiased">
-          <div className="scan-line" />
-          {children}
-          <Toaster theme="dark" position="bottom-right" />
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en" className={`${dmSans.variable} dark`} suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="min-h-screen flex flex-col antialiased">
+        <div className="scan-line" />
+        {children}
+        <Toaster theme="dark" position="bottom-right" />
+      </body>
+    </html>
   );
 }

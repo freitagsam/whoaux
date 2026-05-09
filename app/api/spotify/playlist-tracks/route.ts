@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { getSpotifyToken } from "@/lib/spotify-auth";
 import { ParsedSong } from "@/types/spotify";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,7 @@ interface SpotifyTrack {
   id: string;
   name: string;
   uri: string;
-  type: string; // "track" | "episode"
+  type: string;
   artists: Array<{ name: string }>;
   album: { name: string };
   popularity: number;
@@ -40,28 +40,22 @@ async function spotifyGet<T>(path: string, token: string): Promise<T> {
 
 function isPlayableTrack(item: PlaylistItem | null): item is PlaylistItem & { track: SpotifyTrack } {
   if (!item) return false;
-  if (item.is_local) return false;                   // local files have no Spotify ID
+  if (item.is_local) return false;
   if (!item.track) return false;
   if (!item.track.id) return false;
-  if (item.track.type === "episode") return false;   // podcast episodes lack album/popularity
+  if (item.track.type === "episode") return false;
   return true;
 }
 
 export async function GET(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-
-  const clerk = await clerkClient();
-  const tokenResponse = await clerk.users.getUserOauthAccessToken(userId, "oauth_spotify");
-  const token = tokenResponse.data[0]?.token;
-  if (!token) return NextResponse.json({ error: "Spotify not connected — please sign in again." }, { status: 401 });
+  const { token, errorResponse, setCookies } = await getSpotifyToken(request);
+  if (!token) return errorResponse!;
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Missing playlist id" }, { status: 400 });
 
   try {
-    // market=from_token is required on content endpoints — without it some regions get 400
     const first = await spotifyGet<{
       items: PlaylistItem[] | null;
       total: number;
@@ -90,7 +84,6 @@ export async function GET(request: NextRequest) {
       artist: track.artists.map((a) => a.name).join(", "),
       album: track.album?.name ?? "",
       uri: track.uri,
-      // Use Spotify popularity (stream-based, 0–100) as seeding score; fall back to 50
       playCount: track.popularity > 0 ? track.popularity : 50,
       msPlayed: 0,
       popularity: track.popularity,
@@ -99,11 +92,11 @@ export async function GET(request: NextRequest) {
 
     console.log(`[playlist-tracks] id=${id} total=${first.total} playable=${songs.length}`);
 
-    return NextResponse.json({ songs });
+    const response = NextResponse.json({ songs });
+    setCookies(response);
+    return response;
   } catch (err) {
     if (err instanceof SpotifyForbiddenError) {
-      // 403 = restricted playlist (Spotify-generated, private without scope, etc.)
-      // Return empty songs with 200 so the UI shows "0 loaded" instead of an error toast.
       console.warn(`[playlist-tracks] 403 forbidden for playlist ${id} — returning empty`);
       return NextResponse.json({ songs: [], restricted: true });
     }

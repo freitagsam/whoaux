@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useUser, useSignIn } from "@clerk/nextjs";
+import { useAuth } from "@/lib/use-auth";
 import Link from "next/link";
 import {
   Upload, Trophy, BarChart3, Zap, ChevronRight,
@@ -47,21 +47,12 @@ const mockBracketSongs = [
 ];
 
 export default function HomePage() {
-  const { isLoaded, isSignedIn, user } = useUser();
-  const { signIn } = useSignIn();
+  const { isLoaded, isSignedIn, user } = useAuth();
   const [hasData, setHasData] = useState(false);
 
   useEffect(() => {
     setHasData(!!loadSpotifyData());
   }, []);
-
-  const handleSpotifySignIn = async () => {
-    await signIn?.authenticateWithRedirect({
-      strategy: "oauth_spotify",
-      redirectUrl: "/sso-callback",
-      redirectUrlComplete: "/connect",
-    });
-  };
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--background)" }}>
@@ -135,14 +126,14 @@ export default function HomePage() {
               </>
             ) : (
               <>
-                <button
-                  onClick={handleSpotifySignIn}
+                <Link
+                  href="/api/auth/login"
                   className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-base font-bold transition-all animate-pulse-glow"
                   style={{ background: "var(--green)", color: "#000" }}
                 >
                   <LogIn size={18} />
                   Connect Spotify
-                </button>
+                </Link>
                 <Link
                   href="/upload"
                   className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-base font-medium transition-all"
@@ -160,7 +151,7 @@ export default function HomePage() {
           </div>
 
           {/* Welcome back pill when logged in */}
-          {isLoaded && isSignedIn && user?.fullName && (
+          {isLoaded && isSignedIn && user?.displayName && (
             <div
               className="flex items-center gap-2 px-4 py-2 rounded-full text-sm mt-2"
               style={{
@@ -169,10 +160,10 @@ export default function HomePage() {
                 color: "var(--text-dim)",
               }}
             >
-              {user.imageUrl && (
-                <img src={user.imageUrl} alt="" className="w-5 h-5 rounded-full" />
+              {user.image && (
+                <img src={user.image} alt="" className="w-5 h-5 rounded-full" />
               )}
-              Welcome back, <strong style={{ color: "var(--foreground)" }}>{user.firstName}</strong>
+              Welcome back, <strong style={{ color: "var(--foreground)" }}>{user.displayName}</strong>
             </div>
           )}
         </div>
@@ -322,14 +313,14 @@ export default function HomePage() {
                 {hasData ? "Go to Dashboard" : "Sync Your Music"}
               </Link>
             ) : (
-              <button
-                onClick={handleSpotifySignIn}
+              <Link
+                href="/api/auth/login"
                 className="flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold"
                 style={{ background: "var(--green)", color: "#000" }}
               >
                 <LogIn size={16} />
                 Connect Spotify
-              </button>
+              </Link>
             )}
             <a
               href="https://www.spotify.com/account/privacy/"

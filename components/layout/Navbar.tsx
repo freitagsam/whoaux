@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useUser, useClerk, useSignIn } from "@clerk/nextjs";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/lib/use-auth";
 import { Music2, Trophy, BarChart3, Upload, Zap, LogOut, LogIn, Loader2 } from "lucide-react";
 import { clearSpotifyData } from "@/lib/store";
 
@@ -14,21 +14,12 @@ const links = [
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { isLoaded, isSignedIn, user } = useUser();
-  const { signOut } = useClerk();
-  const { signIn } = useSignIn();
+  const router = useRouter();
+  const { isLoaded, isSignedIn, user } = useAuth();
 
-  const handleSpotifySignIn = async () => {
-    await signIn?.authenticateWithRedirect({
-      strategy: "oauth_spotify",
-      redirectUrl: "/sso-callback",
-      redirectUrlComplete: "/connect",
-    });
-  };
-
-  const handleSignOut = async () => {
+  const handleSignOut = () => {
     clearSpotifyData();
-    await signOut({ redirectUrl: "/" });
+    router.push("/api/auth/logout");
   };
 
   return (
@@ -85,17 +76,16 @@ export default function Navbar() {
             <Loader2 size={16} className="animate-spin" style={{ color: "var(--text-muted)" }} />
           ) : isSignedIn ? (
             <>
-              {/* User avatar */}
-              {user?.imageUrl && (
+              {user?.image && (
                 <img
-                  src={user.imageUrl}
-                  alt={user.fullName ?? "User"}
+                  src={user.image}
+                  alt={user.displayName}
                   className="w-8 h-8 rounded-full object-cover"
                   style={{ border: "2px solid var(--green)" }}
                 />
               )}
               <span className="hidden sm:block text-sm" style={{ color: "var(--text-dim)" }}>
-                {user?.firstName}
+                {user?.displayName}
               </span>
               <button
                 onClick={handleSignOut}
@@ -110,8 +100,8 @@ export default function Navbar() {
               </button>
             </>
           ) : (
-            <button
-              onClick={handleSpotifySignIn}
+            <Link
+              href="/api/auth/login"
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all"
               style={{
                 background: "var(--green)",
@@ -120,7 +110,7 @@ export default function Navbar() {
             >
               <LogIn size={14} />
               Connect Spotify
-            </button>
+            </Link>
           )}
 
           {isSignedIn && (
