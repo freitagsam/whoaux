@@ -10,9 +10,9 @@ import {
 import {
   Music, Trophy, Zap, TrendingUp, Clock, Upload,
   ChevronRight, Trash2, Play, Heart, ListMusic, Lock,
-  Headphones, Shuffle, SkipForward, Laptop, User, Star,
+  Headphones, Shuffle, SkipForward, Laptop, User, Star, RefreshCw,
 } from "lucide-react";
-import { loadSpotifyData, loadBrackets, deleteBracket } from "@/lib/store";
+import { loadSpotifyData, loadBrackets, deleteBracket, clearSpotifyData } from "@/lib/store";
 import { formatPlaytime, formatPlayCount } from "@/lib/spotify-parser";
 import { ParsedSpotifyData, Bracket, ParsedSong, ParsedArtist } from "@/types/spotify";
 import Navbar from "@/components/layout/Navbar";
@@ -260,14 +260,27 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-          <Link
-            href="/bracket/new"
-            className="flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm"
-            style={{ background: "var(--green)", color: "#000" }}
-          >
-            <Trophy size={14} />
-            New Bracket
-          </Link>
+          <div className="flex items-center gap-2">
+            {isOAuth && (
+              <button
+                onClick={() => { clearSpotifyData(); router.push("/connect"); }}
+                className="flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm"
+                style={{ background: "var(--bg-2)", border: "1px solid var(--border)", color: "var(--text-dim)" }}
+                title="Clear local data and re-sync from Spotify"
+              >
+                <RefreshCw size={14} />
+                Re-sync
+              </button>
+            )}
+            <Link
+              href="/bracket/new"
+              className="flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm"
+              style={{ background: "var(--green)", color: "#000" }}
+            >
+              <Trophy size={14} />
+              New Bracket
+            </Link>
+          </div>
         </div>
 
         {/* ── Stat cards ─────────────────────────────────────────────── */}
