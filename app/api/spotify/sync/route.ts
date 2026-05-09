@@ -217,16 +217,14 @@ export async function GET() {
         ? topArtistsLongResult.value.items.filter(Boolean)
         : [];
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("[spotify/sync] API results:", {
-        liked: likedResult.status === "fulfilled" ? likedResult.value.items.length : `FAILED: ${likedResult.reason}`,
-        recent: recentResult.status === "fulfilled" ? recentResult.value.items.length : `FAILED: ${recentResult.reason}`,
-        playlists: playlistsResult.status === "fulfilled" ? playlistsResult.value.items.length : `FAILED: ${playlistsResult.reason}`,
-        profile: profileResult.status === "fulfilled" ? profileResult.value.display_name : `FAILED: ${profileResult.reason}`,
-        topTracksMedium: topTracksMediumResult.status === "fulfilled" ? topTracksMediumResult.value.items.length : `FAILED: ${topTracksMediumResult.reason}`,
-        topArtistsMedium: topArtistsMediumResult.status === "fulfilled" ? topArtistsMediumResult.value.items.length : `FAILED: ${topArtistsMediumResult.reason}`,
-      });
-    }
+    console.log("[spotify/sync] API results:", {
+      liked: likedResult.status === "fulfilled" ? likedResult.value.items.length : `FAILED: ${likedResult.reason}`,
+      recent: recentResult.status === "fulfilled" ? recentResult.value.items.length : `FAILED: ${recentResult.reason}`,
+      playlists: playlistsResult.status === "fulfilled" ? playlistsResult.value.items.length : `FAILED: ${playlistsResult.reason}`,
+      profile: profileResult.status === "fulfilled" ? profileResult.value.display_name : `FAILED: ${profileResult.reason}`,
+      topTracksMedium: topTracksMediumResult.status === "fulfilled" ? topTracksMediumResult.value.items.length : `FAILED: ${topTracksMediumResult.reason}`,
+      topArtistsMedium: topArtistsMediumResult.status === "fulfilled" ? topArtistsMediumResult.value.items.length : `FAILED: ${topArtistsMediumResult.reason}`,
+    });
 
     // Need at least liked OR recently played OR top tracks to do anything useful
     const hasData =
