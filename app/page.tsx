@@ -1,65 +1,342 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Upload, Trophy, BarChart3, Zap, ChevronRight, Music, Star, TrendingUp, LogIn } from "lucide-react";
 
-export default function Home() {
+const features = [
+  {
+    icon: Upload,
+    title: "Upload Your Data",
+    desc: "Drop your Spotify JSON export files. We parse your entire streaming history locally — nothing leaves your browser.",
+    color: "var(--cyan)",
+    glow: "rgba(0,212,255,0.15)",
+  },
+  {
+    icon: Trophy,
+    title: "Build a Bracket",
+    desc: "Choose liked songs, all tracks from an artist, or an album. Pick your size: 8, 16, 32, or 64 songs.",
+    color: "var(--green)",
+    glow: "rgba(29,185,84,0.15)",
+  },
+  {
+    icon: Zap,
+    title: "Battle Songs",
+    desc: "Pick your favorite in each head-to-head matchup. The bracket advances until one song stands above all.",
+    color: "var(--orange)",
+    glow: "rgba(255,107,53,0.15)",
+  },
+  {
+    icon: BarChart3,
+    title: "Explore Your Stats",
+    desc: "See charts, top artists, listening trends, and what your data says about your music taste.",
+    color: "#a855f7",
+    glow: "rgba(168,85,247,0.15)",
+  },
+];
+
+const mockBracketSongs = [
+  { name: "Blinding Lights", artist: "The Weeknd", plays: 312, seed: 1 },
+  { name: "Starboy", artist: "The Weeknd", plays: 287, seed: 2 },
+  { name: "Save Your Tears", artist: "The Weeknd", plays: 241, seed: 3 },
+  { name: "Die For You", artist: "The Weeknd", plays: 198, seed: 4 },
+];
+
+export default function HomePage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--background)" }}>
+      {/* Navbar */}
+      <header
+        className="fixed top-0 left-0 right-0 z-50"
+        style={{
+          background: "rgba(8,8,8,0.85)",
+          backdropFilter: "blur(20px)",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <nav className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: "var(--green)", boxShadow: "0 0 16px var(--green-glow)" }}
+            >
+              <Music size={16} color="#000" strokeWidth={2.5} />
+            </div>
+            <span
+              className="text-xl tracking-wider"
+              style={{ fontFamily: "Bebas Neue, sans-serif" }}
+            >
+              Whoaux
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/upload"
+              className="text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              style={{ color: "var(--text-dim)" }}
+            >
+              Upload Data
+            </Link>
+            <Link
+              href="/bracket/new"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all"
+              style={{ background: "var(--green)", color: "#000" }}
+            >
+              <Trophy size={14} />
+              Get Started
+            </Link>
+          </div>
+        </nav>
+      </header>
+
+      {/* Hero */}
+      <section className="pt-32 pb-24 px-6 flex flex-col items-center text-center relative overflow-hidden">
+        {/* Background glow orbs */}
+        <div
+          className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[400px] rounded-full blur-[120px] pointer-events-none"
+          style={{ background: "radial-gradient(ellipse, rgba(29,185,84,0.12) 0%, transparent 70%)" }}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+        <div
+          className="absolute top-40 left-1/4 w-[300px] h-[300px] rounded-full blur-[100px] pointer-events-none"
+          style={{ background: "radial-gradient(ellipse, rgba(0,212,255,0.06) 0%, transparent 70%)" }}
+        />
+
+        <div className="animate-fade-up relative z-10 flex flex-col items-center gap-6 max-w-4xl">
+          <div
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold tracking-wider uppercase"
+            style={{
+              background: "rgba(29,185,84,0.1)",
+              border: "1px solid rgba(29,185,84,0.3)",
+              color: "var(--green)",
+            }}
+          >
+            <Star size={10} />
+            Your Spotify data. Reimagined.
+          </div>
+
+          <h1
+            className="text-7xl sm:text-8xl md:text-[108px] leading-none tracking-wide"
+            style={{ fontFamily: "Bebas Neue, sans-serif" }}
+          >
+            <span className="gradient-text">Battle</span>
+            <br />
+            <span style={{ color: "var(--foreground)" }}>Your Music</span>
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+
+          <p
+            className="text-lg max-w-xl leading-relaxed"
+            style={{ color: "var(--text-dim)" }}
+          >
+            Upload your Spotify history, build tournament brackets, and finally answer the
+            question: <strong style={{ color: "var(--foreground)" }}>what&apos;s your all-time favorite song?</strong>
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 mt-2">
+            <Link
+              href="/connect"
+              className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-base font-bold transition-all animate-pulse-glow"
+              style={{ background: "var(--green)", color: "#000" }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              <LogIn size={18} />
+              Connect Spotify
+            </Link>
+            <Link
+              href="/upload"
+              className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-base font-medium transition-all"
+              style={{
+                background: "transparent",
+                color: "var(--text-dim)",
+                border: "1px solid var(--border)",
+              }}
             >
-              Learning
-            </a>{" "}
-            center.
+              <Upload size={16} />
+              Upload Data File
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Mock bracket preview */}
+      <section className="px-6 pb-24 flex flex-col items-center">
+        <div
+          className="w-full max-w-2xl rounded-2xl overflow-hidden animate-fade-up delay-200"
+          style={{
+            background: "var(--bg-1)",
+            border: "1px solid var(--border)",
+            boxShadow: "0 40px 100px rgba(0,0,0,0.6)",
+          }}
+        >
+          {/* Window header */}
+          <div
+            className="px-5 py-3 flex items-center gap-2"
+            style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-2)" }}
+          >
+            <div className="w-3 h-3 rounded-full" style={{ background: "#ff5f57" }} />
+            <div className="w-3 h-3 rounded-full" style={{ background: "#febc2e" }} />
+            <div className="w-3 h-3 rounded-full" style={{ background: "#28c840" }} />
+            <span className="ml-3 text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              The Weeknd — Artist Bracket · Round of 8
+            </span>
+          </div>
+
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <span
+                className="text-xs font-semibold uppercase tracking-widest"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Pick your favorite
+              </span>
+              <div
+                className="px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ background: "rgba(29,185,84,0.1)", color: "var(--green)" }}
+              >
+                Match 3 of 4
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {mockBracketSongs.slice(0, 2).map((song, i) => (
+                <div
+                  key={i}
+                  className="p-5 rounded-xl cursor-pointer transition-all"
+                  style={{
+                    background: i === 0 ? "rgba(29,185,84,0.07)" : "var(--bg-2)",
+                    border: i === 0 ? "2px solid var(--green)" : "2px solid var(--border)",
+                    boxShadow: i === 0 ? "0 0 30px var(--green-glow)" : "none",
+                  }}
+                >
+                  <div
+                    className="text-xs mb-1 font-bold"
+                    style={{ color: i === 0 ? "var(--green)" : "var(--text-muted)" }}
+                  >
+                    #{song.seed} Seed
+                  </div>
+                  <div className="font-semibold text-sm leading-tight mb-1">{song.name}</div>
+                  <div className="text-xs" style={{ color: "var(--text-dim)" }}>
+                    {song.artist}
+                  </div>
+                  <div
+                    className="mt-3 text-xs font-medium flex items-center gap-1"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    <TrendingUp size={10} />
+                    {song.plays} plays
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 progress-bar">
+              <div className="progress-fill" style={{ width: "62%" }} />
+            </div>
+            <div
+              className="mt-2 text-xs text-center"
+              style={{ color: "var(--text-muted)" }}
+            >
+              5 matches remaining
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features grid */}
+      <section className="px-6 pb-24 max-w-6xl mx-auto w-full">
+        <div className="text-center mb-14">
+          <h2
+            className="text-5xl md:text-6xl mb-4"
+            style={{ fontFamily: "Bebas Neue, sans-serif" }}
+          >
+            How It Works
+          </h2>
+          <p style={{ color: "var(--text-dim)" }}>
+            Four steps from data to definitive ranking
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {features.map(({ icon: Icon, title, desc, color, glow }, i) => (
+            <div
+              key={i}
+              className="p-6 rounded-2xl flex flex-col gap-4 animate-fade-up"
+              style={{
+                background: "var(--bg-1)",
+                border: "1px solid var(--border)",
+                animationDelay: `${i * 0.1}s`,
+              }}
+            >
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ background: glow, border: `1px solid ${color}30` }}
+              >
+                <Icon size={18} style={{ color }} />
+              </div>
+              <div>
+                <div className="font-semibold text-sm mb-1">{title}</div>
+                <div className="text-sm leading-relaxed" style={{ color: "var(--text-dim)" }}>
+                  {desc}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-      </main>
+      </section>
+
+      {/* CTA footer */}
+      <section className="px-6 pb-32 flex flex-col items-center text-center">
+        <div
+          className="w-full max-w-2xl rounded-2xl p-12 flex flex-col items-center gap-6"
+          style={{
+            background: "linear-gradient(135deg, rgba(29,185,84,0.08) 0%, rgba(0,212,255,0.05) 100%)",
+            border: "1px solid rgba(29,185,84,0.2)",
+          }}
+        >
+          <h2
+            className="text-5xl"
+            style={{ fontFamily: "Bebas Neue, sans-serif" }}
+          >
+            Ready to find your
+            <br />
+            <span className="gradient-text">#1 Song?</span>
+          </h2>
+          <p style={{ color: "var(--text-dim)" }}>
+            Request your Spotify data (takes 1–5 days to arrive) then come back and upload it here.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Link
+              href="/upload"
+              className="flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold"
+              style={{ background: "var(--green)", color: "#000" }}
+            >
+              <Upload size={16} />
+              Upload Your Data
+            </Link>
+            <a
+              href="https://www.spotify.com/account/privacy/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-8 py-3.5 rounded-xl font-medium"
+              style={{ border: "1px solid var(--border)", color: "var(--text-dim)" }}
+            >
+              Request Spotify Data
+              <ChevronRight size={14} />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer
+        className="mt-auto px-6 py-6"
+        style={{ borderTop: "1px solid var(--border)" }}
+      >
+        <div
+          className="max-w-6xl mx-auto flex items-center justify-between text-xs"
+          style={{ color: "var(--text-muted)" }}
+        >
+          <span style={{ fontFamily: "Bebas Neue, sans-serif", fontSize: 16 }}>
+            Whoaux
+          </span>
+          <span>Your data stays local. No accounts required.</span>
+        </div>
+      </footer>
     </div>
   );
 }
