@@ -123,35 +123,77 @@ async function fetchAllLikedSongs(
   return items.slice(0, max);
 }
 
+// Raw shape Spotify returns for a playlist in the /me/playlists listing
+interface RawPlaylistItem {
+  id: string;
+  name: string;
+  description?: string;
+  images?: Array<{ url: string }>;
+  uri: string;
+  tracks?: { href?: string; total?: number } | null;
+}
+
 async function fetchAllPlaylists(token: string): Promise<SpotifyPlaylist[]> {
   const limit = 50;
-  const first = await spotifyGet<{ items: SpotifyPlaylist[]; total: number }>(
+  const first = await spotifyGet<{ items: RawPlaylistItem[]; total: number }>(
     `/me/playlists?limit=${limit}&offset=0`,
     token
   );
-  const items = first.items.filter((p) => !!p?.id);
+  const raw = first.items.filter((p) => !!p?.id);
 
-  console.log("[spotify/sync] Playlists sample (first 3):", items.slice(0, 3).map(p => ({
+  if (first.total > limit) {
+    const extraPages = Math.ceil((first.total - limit) / limit);
+    const pages = await Promise.all(
+      Array.from({ length: extraPages }, (_, i) =>
+        spotifyGet<{ items: RawPlaylistItem[] }>(
+          `/me/playlists?limit=${limit}&offset=${(i + 1) * limit}`,
+          token
+        ).catch(() => ({ items: [] as RawPlaylistItem[] }))
+      )
+    );
+    for (const page of pages) {
+      raw.push(...page.items.filter((p) => !!p?.id));
+    }
+  }
+
+  // Log raw tracks field to diagnose 0-count issues
+  console.log("[spotify/sync] Playlists sample (first 5):", raw.slice(0, 5).map(p => ({
     name: p.name,
-    tracks: p.tracks,
-    id: p.id,
+    tracksRaw: p.tracks,
+    hasTotal: typeof p.tracks?.total,
   })));
 
-  if (first.total <= limit) return items;
-
-  const extraPages = Math.ceil((first.total - limit) / limit);
-  const pages = await Promise.all(
-    Array.from({ length: extraPages }, (_, i) =>
-      spotifyGet<{ items: SpotifyPlaylist[] }>(
-        `/me/playlists?limit=${limit}&offset=${(i + 1) * limit}`,
-        token
-      ).catch(() => ({ items: [] as SpotifyPlaylist[] }))
-    )
-  );
-  for (const page of pages) {
-    items.push(...page.items.filter((p) => !!p?.id));
+  // Some Spotify playlist types (Daylist, AI playlists, radio) return tracks: null
+  // or tracks without a total. Fetch the real count for up to 30 of these so
+  // the UI shows accurate numbers instead of "0 tracks".
+  const needsCount = raw.filter(p => p.tracks?.total == null).slice(0, 30);
+  if (needsCount.length > 0) {
+    const counts = await Promise.allSettled(
+      needsCount.map((p) =>
+        spotifyGet<{ tracks?: { total?: number } | null }>(
+          `/playlists/${p.id}?fields=tracks.total`,
+          token
+        ).catch(() => ({ tracks: null }))
+      )
+    );
+    for (let i = 0; i < needsCount.length; i++) {
+      const result = counts[i];
+      if (result.status === "fulfilled") {
+        const total = result.value?.tracks?.total;
+        if (total != null) needsCount[i].tracks = { total };
+      }
+    }
+    console.log(`[spotify/sync] Refreshed track counts for ${needsCount.length} playlists`);
   }
-  return items;
+
+  return raw.map((p): SpotifyPlaylist => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    images: p.images ?? [],
+    uri: p.uri,
+    tracks: p.tracks?.total != null ? { total: p.tracks.total } : null,
+  }));
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────

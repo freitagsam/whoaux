@@ -24,21 +24,20 @@ async function spotifyGet<T>(path: string, token: string): Promise<T> {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`Spotify error ${res.status} on ${path}`);
+  if (res.status === 401) throw new Error("Spotify token expired — please re-sync.");
+  if (res.status === 403) throw new Error("Spotify access denied.");
+  if (res.status === 429) throw new Error("Spotify rate limit — try again in a moment.");
+  if (!res.ok) throw new Error(`Spotify ${res.status} on ${path}`);
   return res.json();
 }
 
-async function fetchAlbumTracks(
-  albumId: string,
-  albumName: string,
-  token: string
-): Promise<SimpleTrack[]> {
+async function fetchAlbumTracks(albumId: string, token: string): Promise<SimpleTrack[]> {
   const limit = 50;
   const first = await spotifyGet<{ items: SimpleTrack[]; total: number }>(
     `/albums/${albumId}/tracks?market=from_token&limit=${limit}&offset=0`,
     token
   );
-  const items = [...first.items];
+  const items = [...(first.items ?? [])];
   if (first.total > limit) {
     const extraPages = Math.ceil((first.total - limit) / limit);
     const pages = await Promise.all(
@@ -49,15 +48,18 @@ async function fetchAlbumTracks(
         ).catch(() => ({ items: [] as SimpleTrack[] }))
       )
     );
-    for (const page of pages) items.push(...page.items);
+    for (const page of pages) items.push(...(page.items ?? []));
   }
-  return items;
+  return items.filter((t) => !!t?.id);
 }
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+  if (session.error) {
+    return NextResponse.json({ error: "Spotify session expired — please re-sync." }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -68,55 +70,47 @@ export async function GET(request: NextRequest) {
 
   const token = session.accessToken as string;
   const albumIds = albumIdsParam.split(",").filter(Boolean);
+  const albumNamesParam = searchParams.get("albumNames") ?? "";
+  const albumNames = albumNamesParam.split("|||");
 
   try {
-    // Fetch tracks for all albums in parallel
-    // We also need album names — caller sends them as albumNames param
-    const albumNamesParam = searchParams.get("albumNames") ?? "";
-    const albumNames = albumNamesParam.split("|||");
-
+    // Fetch all album tracks in parallel
     const albumTrackSets = await Promise.all(
-      albumIds.map((id, idx) =>
-        fetchAlbumTracks(id, albumNames[idx] ?? "", token).catch(() => [])
-      )
+      albumIds.map((id) => fetchAlbumTracks(id, token).catch(() => [] as SimpleTrack[]))
     );
 
-    // Flatten + deduplicate by track URI
+    // Flatten + deduplicate by URI
     const seenUris = new Set<string>();
-    const allSimpleTracks: (SimpleTrack & { albumName: string })[] = [];
+    const allTracks: (SimpleTrack & { albumName: string })[] = [];
     for (let i = 0; i < albumTrackSets.length; i++) {
       const albumName = albumNames[i] ?? "";
       for (const track of albumTrackSets[i]) {
         if (!seenUris.has(track.uri)) {
           seenUris.add(track.uri);
-          allSimpleTracks.push({ ...track, albumName });
+          allTracks.push({ ...track, albumName });
         }
       }
     }
 
-    // Batch fetch full track objects to get popularity (50 per request)
-    const trackIds = allSimpleTracks.map((t) => t.id);
-    const fullTracks: FullTrack[] = [];
+    // Batch-fetch full track objects for popularity scores (50 per request)
+    const trackIds = allTracks.map((t) => t.id);
+    const popularityMap = new Map<string, number>();
     for (let i = 0; i < trackIds.length; i += 50) {
       const batch = trackIds.slice(i, i + 50);
       try {
         const res = await spotifyGet<{ tracks: (FullTrack | null)[] }>(
-          `/tracks?ids=${batch.join(",")}`,
+          `/tracks?ids=${batch.join(",")}&market=from_token`,
           token
         );
-        fullTracks.push(...res.tracks.filter((t): t is FullTrack => !!t?.id));
+        for (const t of res.tracks ?? []) {
+          if (t?.uri) popularityMap.set(t.uri, t.popularity ?? 50);
+        }
       } catch {
-        // If batch fails, use simple tracks with no popularity
+        // popularity stays undefined for this batch — use default
       }
     }
 
-    // Build popularity map
-    const popularityMap = new Map<string, number>();
-    for (const t of fullTracks) {
-      popularityMap.set(t.uri, t.popularity);
-    }
-
-    const songs: ParsedSong[] = allSimpleTracks.map((track) => ({
+    const songs: ParsedSong[] = allTracks.map((track) => ({
       id: track.id,
       name: track.name,
       artist: track.artists.map((a) => a.name).join(", "),
@@ -128,9 +122,11 @@ export async function GET(request: NextRequest) {
       duration_ms: track.duration_ms,
     }));
 
+    console.log(`[artist-tracks] albums=${albumIds.length} tracks=${songs.length}`);
     return NextResponse.json({ songs });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
+    console.error("[artist-tracks] Error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

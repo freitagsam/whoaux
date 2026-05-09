@@ -480,7 +480,7 @@ export default function DashboardPage() {
                           )}
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium truncate">{pl.name}</div>
-                            <div className="text-xs" style={{ color: "var(--text-muted)" }}>{pl.tracks?.total ?? 0} tracks</div>
+                            <div className="text-xs" style={{ color: "var(--text-muted)" }}>{pl.tracks?.total != null ? `${pl.tracks.total} tracks` : "— tracks"}</div>
                           </div>
                         </div>
                       ))}
@@ -893,7 +893,7 @@ export default function DashboardPage() {
                       <div className="p-3 flex flex-col flex-1">
                         <div className="font-semibold text-sm truncate">{pl.name}</div>
                         <div className="text-xs mt-0.5 mb-3" style={{ color: "var(--text-muted)" }}>
-                          {pl.tracks?.total ?? 0} tracks
+                          {pl.tracks?.total != null ? `${pl.tracks.total} tracks` : "— tracks"}
                         </div>
                         <div className="flex gap-2 mt-auto">
                           <Link
