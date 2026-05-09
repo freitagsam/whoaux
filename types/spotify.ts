@@ -48,25 +48,39 @@ export interface SpotifyLibrary {
   other?: unknown[];
 }
 
+export interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  description?: string;
+  images: Array<{ url: string }>;
+  tracks: { total: number };
+  uri: string;
+}
+
 // Parsed & normalized song for use in the app
 export interface ParsedSong {
-  id: string; // derived from URI or generated
+  id: string;
   name: string;
   artist: string;
   album: string;
   uri: string;
-  playCount: number; // personal listens
-  msPlayed: number; // total ms played personally
-  artistPlayCount?: number; // total plays across all artist songs (for seeding)
+  playCount: number;        // real listens (upload) or seeding score (oauth — do NOT display as plays)
+  msPlayed: number;         // real total ms played (upload only, always 0 for oauth)
+  artistPlayCount?: number; // total plays across all artist songs (for bracket seeding)
+  popularity?: number;      // Spotify popularity score 0–100 (oauth only)
+  duration_ms?: number;     // track duration in ms
 }
 
 export interface ParsedArtist {
   name: string;
   uri?: string;
-  totalPlays: number;
-  totalMsPlayed: number;
+  totalPlays: number;       // real from upload; synthetic from oauth (do NOT display for oauth)
+  totalMsPlayed: number;    // real from upload; always 0 for oauth
   songs: ParsedSong[];
   albumCount: number;
+  popularity?: number;      // Spotify artist popularity 0–100 (oauth only)
+  genres?: string[];        // Spotify-assigned genres (oauth only)
+  image?: string;           // Artist image URL (oauth only)
 }
 
 export interface ParsedAlbum {
@@ -86,6 +100,48 @@ export interface ParsedSpotifyData {
   totalPlays: number;
   totalMsPlayed: number;
   dateRange: { start: string; end: string } | null;
+
+  // "oauth" = connected via Spotify login; "upload" = Spotify data export file
+  dataSource?: "oauth" | "upload";
+
+  // OAuth-only: Spotify's algorithmic top tracks per time range
+  topTracksByTimeRange?: {
+    short: ParsedSong[];   // ~4 weeks
+    medium: ParsedSong[];  // ~6 months
+    long: ParsedSong[];    // all time
+  };
+
+  // OAuth-only: Spotify's algorithmic top artists per time range
+  topArtistsByTimeRange?: {
+    short: ParsedArtist[];
+    medium: ParsedArtist[];
+    long: ParsedArtist[];
+  };
+
+  // OAuth-only: recently played tracks (up to 50)
+  recentlyPlayed?: ParsedSong[];
+
+  // OAuth-only: user's playlists
+  playlists?: SpotifyPlaylist[];
+
+  // OAuth-only: Spotify profile info
+  userProfile?: {
+    name: string;
+    email?: string;
+    image?: string;
+    country?: string;
+    product?: string;    // "premium" | "free" | "open"
+    followers?: number;
+  };
+
+  // Upload-only: detailed listening patterns from streaming history
+  listeningPatterns?: {
+    hourlyDistribution: number[];           // 24 entries (hour 0–23)
+    dailyDistribution: number[];            // 7 entries (0 = Sunday)
+    skipRate: number;                       // 0.0 – 1.0
+    platformCounts: Record<string, number>; // e.g. { "iOS": 1200, "Android": 400 }
+    shuffleRatio: number;                   // 0.0 – 1.0
+  };
 }
 
 // Bracket types
@@ -102,13 +158,13 @@ export interface BracketMatch {
   id: string;
   songA: BracketSong | null;
   songB: BracketSong | null;
-  winnerId: string | null; // song URI
-  position: number; // position in round
+  winnerId: string | null; // winning song URI
+  position: number;
 }
 
 export interface BracketRound {
-  roundNumber: number; // 1 = first round, increases toward final
-  label: string; // "Round of 16", "Quarterfinal", etc.
+  roundNumber: number; // 1 = first round
+  label: string;       // "Round of 16", "Quarterfinal", etc.
   matches: BracketMatch[];
 }
 
@@ -116,7 +172,7 @@ export interface Bracket {
   id: string;
   name: string;
   mode: BracketMode;
-  filter: string; // artist name, album name, or "liked"/"top"
+  filter: string;
   seedingMethod: SeedingMethod;
   size: BracketSize;
   rounds: BracketRound[];

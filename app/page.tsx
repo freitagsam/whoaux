@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Upload, Trophy, BarChart3, Zap, ChevronRight, Music, Star, TrendingUp, LogIn } from "lucide-react";
+import { Upload, Trophy, BarChart3, Zap, ChevronRight, Music, Star, LogIn } from "lucide-react";
 
 const features = [
   {
@@ -33,10 +33,10 @@ const features = [
 ];
 
 const mockBracketSongs = [
-  { name: "Blinding Lights", artist: "The Weeknd", plays: 312, seed: 1 },
-  { name: "Starboy", artist: "The Weeknd", plays: 287, seed: 2 },
-  { name: "Save Your Tears", artist: "The Weeknd", plays: 241, seed: 3 },
-  { name: "Die For You", artist: "The Weeknd", plays: 198, seed: 4 },
+  { name: "Blinding Lights", artist: "The Weeknd", seed: 1 },
+  { name: "Starboy", artist: "The Weeknd", seed: 2 },
+  { name: "Save Your Tears", artist: "The Weeknd", seed: 3 },
+  { name: "Die For You", artist: "The Weeknd", seed: 4 },
 ];
 
 export default function HomePage() {
@@ -214,11 +214,10 @@ export default function HomePage() {
                     {song.artist}
                   </div>
                   <div
-                    className="mt-3 text-xs font-medium flex items-center gap-1"
+                    className="mt-3 text-xs font-medium"
                     style={{ color: "var(--text-muted)" }}
                   >
-                    <TrendingUp size={10} />
-                    {song.plays} plays
+                    #{song.seed} seed
                   </div>
                 </div>
               ))}

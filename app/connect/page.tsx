@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Music2, Loader2, CheckCircle2, AlertCircle, Zap, Heart, ListMusic, X, RefreshCw, LayoutDashboard } from "lucide-react";
+import { Music2, Loader2, CheckCircle2, AlertCircle, Zap, Heart, ListMusic, X, RefreshCw, LayoutDashboard, TrendingUp, User } from "lucide-react";
 import { saveSpotifyData, loadSpotifyData } from "@/lib/store";
 import Navbar from "@/components/layout/Navbar";
 
@@ -13,6 +13,8 @@ const syncSteps = [
   { label: "Liked songs", icon: Heart },
   { label: "Recently played", icon: Zap },
   { label: "Playlists", icon: ListMusic },
+  { label: "Top tracks — 4 wks, 6 mo, all time", icon: TrendingUp },
+  { label: "Top artists — 4 wks, 6 mo, all time", icon: User },
 ];
 
 const TIMEOUT_MS = 15000;
@@ -131,7 +133,7 @@ export default function ConnectPage() {
               </h1>
 
               <p className="mb-8 leading-relaxed" style={{ color: "var(--text-dim)" }}>
-                Sign in with your Spotify account to instantly pull your liked songs and playlists.
+                Sign in with Spotify to pull your library, top tracks, top artists, playlists, and recently played — all at once.
               </p>
 
               <div

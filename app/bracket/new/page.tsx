@@ -306,7 +306,8 @@ export default function NewBracketPage() {
                       <div>
                         <div className="font-medium text-sm">{artist.name}</div>
                         <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                          {artist.songs.length} songs · {artist.totalPlays.toLocaleString()} plays
+                          {artist.songs.length} songs
+                          {data?.dataSource !== "oauth" && ` · ${artist.totalPlays.toLocaleString()} plays`}
                         </div>
                       </div>
                       <Users size={14} style={{ color: "var(--text-muted)" }} />

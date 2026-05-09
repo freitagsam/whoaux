@@ -1,10 +1,48 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { ParsedArtist, ParsedAlbum, ParsedSong, ParsedSpotifyData } from "@/types/spotify";
+import {
+  ParsedArtist,
+  ParsedAlbum,
+  ParsedSong,
+  ParsedSpotifyData,
+  SpotifyPlaylist,
+} from "@/types/spotify";
 
-// Force dynamic so Next.js never caches this route
 export const dynamic = "force-dynamic";
+
+// ─── Local Spotify API types ───────────────────────────────────────────────
+
+interface SpotifyTrack {
+  id: string;
+  name: string;
+  uri: string;
+  artists: Array<{ name: string }>;
+  album: { name: string };
+  popularity: number;
+  duration_ms: number;
+}
+
+interface SpotifyTopArtist {
+  id: string;
+  name: string;
+  uri: string;
+  popularity: number;
+  genres: string[];
+  images: Array<{ url: string }>;
+  followers: { total: number };
+}
+
+interface SpotifyProfile {
+  display_name: string;
+  email: string;
+  country: string;
+  product: string; // "premium" | "free" | "open"
+  images: Array<{ url: string }>;
+  followers: { total: number };
+}
+
+// ─── Fetcher ───────────────────────────────────────────────────────────────
 
 async function spotifyGet<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`https://api.spotify.com/v1${path}`, {
@@ -18,14 +56,50 @@ async function spotifyGet<T>(path: string, token: string): Promise<T> {
   return res.json();
 }
 
+// ─── Converters ───────────────────────────────────────────────────────────
+
+function trackToSong(track: SpotifyTrack): ParsedSong {
+  return {
+    id: track.id,
+    name: track.name,
+    artist: track.artists.map((a) => a.name).join(", "),
+    album: track.album.name,
+    uri: track.uri,
+    // Use Spotify popularity (0–100) as seeding proxy — never display as "play count"
+    playCount: track.popularity,
+    msPlayed: 0,
+    popularity: track.popularity,
+    duration_ms: track.duration_ms,
+  };
+}
+
+function topArtistToParsed(artist: SpotifyTopArtist): ParsedArtist {
+  return {
+    name: artist.name,
+    uri: artist.uri,
+    totalPlays: 0,
+    totalMsPlayed: 0,
+    songs: [],
+    albumCount: 0,
+    popularity: artist.popularity,
+    genres: artist.genres,
+    image: artist.images[0]?.url,
+  };
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────
+
 export async function GET() {
   const session = await getServerSession(authOptions);
 
   if (!session?.accessToken) {
     return NextResponse.json(
-      { error: session?.error === "RefreshAccessTokenError"
-          ? "Your Spotify session expired. Please sign in again."
-          : "Not signed in" },
+      {
+        error:
+          session?.error === "RefreshAccessTokenError"
+            ? "Your Spotify session expired. Please sign in again."
+            : "Not signed in",
+      },
       { status: 401 }
     );
   }
@@ -40,10 +114,21 @@ export async function GET() {
   const token = session.accessToken;
 
   try {
-    // Three parallel requests — fast, no pagination
-    const [likedResult, recentResult, playlistsResult] = await Promise.allSettled([
+    // Run all 10 Spotify API calls in parallel
+    const [
+      likedResult,
+      recentResult,
+      playlistsResult,
+      profileResult,
+      topTracksShortResult,
+      topTracksMediumResult,
+      topTracksLongResult,
+      topArtistsShortResult,
+      topArtistsMediumResult,
+      topArtistsLongResult,
+    ] = await Promise.allSettled([
       spotifyGet<{ items: Array<{ track: SpotifyTrack | null; added_at: string }> }>(
-        "/me/tracks?limit=50",
+        "/me/tracks?limit=100",
         token
       ),
       spotifyGet<{ items: Array<{ track: SpotifyTrack; played_at: string }> }>(
@@ -54,12 +139,39 @@ export async function GET() {
         "/me/playlists?limit=50",
         token
       ),
+      spotifyGet<SpotifyProfile>("/me", token),
+      spotifyGet<{ items: SpotifyTrack[] }>(
+        "/me/top/tracks?limit=50&time_range=short_term",
+        token
+      ),
+      spotifyGet<{ items: SpotifyTrack[] }>(
+        "/me/top/tracks?limit=50&time_range=medium_term",
+        token
+      ),
+      spotifyGet<{ items: SpotifyTrack[] }>(
+        "/me/top/tracks?limit=50&time_range=long_term",
+        token
+      ),
+      spotifyGet<{ items: SpotifyTopArtist[] }>(
+        "/me/top/artists?limit=50&time_range=short_term",
+        token
+      ),
+      spotifyGet<{ items: SpotifyTopArtist[] }>(
+        "/me/top/artists?limit=50&time_range=medium_term",
+        token
+      ),
+      spotifyGet<{ items: SpotifyTopArtist[] }>(
+        "/me/top/artists?limit=50&time_range=long_term",
+        token
+      ),
     ]);
 
     // Graceful degradation — use whatever succeeded
     const likedItems =
       likedResult.status === "fulfilled"
-        ? likedResult.value.items.filter((i): i is { track: SpotifyTrack; added_at: string } => !!i?.track?.id)
+        ? likedResult.value.items.filter(
+            (i): i is { track: SpotifyTrack; added_at: string } => !!i?.track?.id
+          )
         : [];
 
     const recentItems =
@@ -67,20 +179,60 @@ export async function GET() {
         ? recentResult.value.items.filter((i) => !!i?.track?.id)
         : [];
 
-    const playlists =
+    const playlists: SpotifyPlaylist[] =
       playlistsResult.status === "fulfilled"
         ? playlistsResult.value.items.filter(Boolean)
         : [];
 
-    // Log any partial failures in dev
+    const profile =
+      profileResult.status === "fulfilled" ? profileResult.value : null;
+
+    const topTracksShort =
+      topTracksShortResult.status === "fulfilled"
+        ? topTracksShortResult.value.items.filter(Boolean)
+        : [];
+
+    const topTracksMedium =
+      topTracksMediumResult.status === "fulfilled"
+        ? topTracksMediumResult.value.items.filter(Boolean)
+        : [];
+
+    const topTracksLong =
+      topTracksLongResult.status === "fulfilled"
+        ? topTracksLongResult.value.items.filter(Boolean)
+        : [];
+
+    const topArtistsShort =
+      topArtistsShortResult.status === "fulfilled"
+        ? topArtistsShortResult.value.items.filter(Boolean)
+        : [];
+
+    const topArtistsMedium =
+      topArtistsMediumResult.status === "fulfilled"
+        ? topArtistsMediumResult.value.items.filter(Boolean)
+        : [];
+
+    const topArtistsLong =
+      topArtistsLongResult.status === "fulfilled"
+        ? topArtistsLongResult.value.items.filter(Boolean)
+        : [];
+
     if (process.env.NODE_ENV === "development") {
       if (likedResult.status === "rejected") console.error("Liked songs failed:", likedResult.reason);
       if (recentResult.status === "rejected") console.error("Recently played failed:", recentResult.reason);
       if (playlistsResult.status === "rejected") console.error("Playlists failed:", playlistsResult.reason);
+      if (profileResult.status === "rejected") console.error("Profile failed:", profileResult.reason);
+      if (topTracksMediumResult.status === "rejected") console.error("Top tracks failed:", topTracksMediumResult.reason);
+      if (topArtistsMediumResult.status === "rejected") console.error("Top artists failed:", topArtistsMediumResult.reason);
     }
 
-    // If all three failed, something is fundamentally wrong
-    if (!likedItems.length && !recentItems.length && !playlists.length) {
+    // Need at least liked OR recently played OR top tracks to do anything useful
+    const hasData =
+      likedItems.length > 0 ||
+      recentItems.length > 0 ||
+      topTracksMedium.length > 0;
+
+    if (!hasData) {
       const firstError =
         likedResult.status === "rejected" ? likedResult.reason?.message :
         recentResult.status === "rejected" ? recentResult.reason?.message :
@@ -88,24 +240,28 @@ export async function GET() {
       return NextResponse.json({ error: firstError }, { status: 502 });
     }
 
-    // Count recent plays per track URI for seeding boost
+    // ── Build liked songs list ─────────────────────────────────────────────
+    // Seeded by recency in library (recently liked = higher score) + boost if recently played
     const recentCountMap = new Map<string, number>();
     for (const item of recentItems) {
       recentCountMap.set(item.track.uri, (recentCountMap.get(item.track.uri) ?? 0) + 1);
     }
 
-    // Build liked songs list (seeded by recency in library + recent plays)
     const likedSongs: ParsedSong[] = likedItems.map((item, idx) => ({
       id: item.track.id,
       name: item.track.name,
       artist: item.track.artists.map((a) => a.name).join(", "),
       album: item.track.album.name,
       uri: item.track.uri,
-      playCount: (50 - idx) + (recentCountMap.get(item.track.uri) ?? 0) * 5,
+      // Recency-based seeding score: higher = more recently liked / recently played
+      // This is for bracket seeding only — never displayed as "plays"
+      playCount: (likedItems.length - idx) + (recentCountMap.get(item.track.uri) ?? 0) * 5,
       msPlayed: 0,
+      popularity: item.track.popularity,
+      duration_ms: item.track.duration_ms,
     }));
 
-    // Add recently played songs not already in liked
+    // Recently played tracks not already in liked songs (for bracket pool)
     const likedUris = new Set(likedSongs.map((s) => s.uri));
     const seenRecent = new Set<string>();
     const recentExtra: ParsedSong[] = [];
@@ -120,12 +276,14 @@ export async function GET() {
         uri: item.track.uri,
         playCount: recentCountMap.get(item.track.uri) ?? 1,
         msPlayed: 0,
+        popularity: item.track.popularity,
+        duration_ms: item.track.duration_ms,
       });
     }
 
     const allSongs = [...likedSongs, ...recentExtra].sort((a, b) => b.playCount - a.playCount);
 
-    // Build artist map
+    // ── Build artist map from liked + recently played ──────────────────────
     const artistMap = new Map<string, ParsedArtist>();
     for (const song of allSongs) {
       const existing = artistMap.get(song.artist);
@@ -147,7 +305,7 @@ export async function GET() {
     }
     const artists = Array.from(artistMap.values()).sort((a, b) => b.totalPlays - a.totalPlays);
 
-    // Build album map
+    // ── Build album map ────────────────────────────────────────────────────
     const albumMap = new Map<string, ParsedAlbum>();
     for (const song of allSongs) {
       const key = `${song.album}::${song.artist}`;
@@ -156,22 +314,79 @@ export async function GET() {
         existing.songs.push(song);
         existing.totalPlays += song.playCount;
       } else {
-        albumMap.set(key, { name: song.album, artist: song.artist, songs: [song], totalPlays: song.playCount });
+        albumMap.set(key, {
+          name: song.album,
+          artist: song.artist,
+          songs: [song],
+          totalPlays: song.playCount,
+        });
       }
     }
     const albums = Array.from(albumMap.values()).sort((a, b) => b.totalPlays - a.totalPlays);
 
-    const result: ParsedSpotifyData & { playlists: SpotifyPlaylist[] } = {
+    // ── Convert top tracks & artists ───────────────────────────────────────
+    const topTracksShortParsed = topTracksShort.map(trackToSong);
+    const topTracksMediumParsed = topTracksMedium.map(trackToSong);
+    const topTracksLongParsed = topTracksLong.map(trackToSong);
+
+    const topArtistsShortParsed = topArtistsShort.map(topArtistToParsed);
+    const topArtistsMediumParsed = topArtistsMedium.map(topArtistToParsed);
+    const topArtistsLongParsed = topArtistsLong.map(topArtistToParsed);
+
+    // ── Recently played list (deduped, for dashboard display) ──────────────
+    const recentlyPlayedDisplay: ParsedSong[] = [];
+    const seenForRecent = new Set<string>();
+    for (const item of recentItems) {
+      if (seenForRecent.has(item.track.uri)) continue;
+      seenForRecent.add(item.track.uri);
+      recentlyPlayedDisplay.push({
+        id: item.track.id,
+        name: item.track.name,
+        artist: item.track.artists.map((a) => a.name).join(", "),
+        album: item.track.album.name,
+        uri: item.track.uri,
+        playCount: 0,
+        msPlayed: 0,
+        popularity: item.track.popularity,
+        duration_ms: item.track.duration_ms,
+      });
+    }
+
+    const result: ParsedSpotifyData = {
       songs: allSongs,
       artists,
       albums,
       likedSongs,
-      topSongs: allSongs.slice(0, 50),
-      topArtists: artists.slice(0, 20),
-      totalPlays: allSongs.reduce((acc, s) => acc + s.playCount, 0),
-      totalMsPlayed: 0,
+      // topSongs = Spotify's algorithmic top tracks (medium term) — used for "My Top Songs" bracket
+      topSongs: topTracksMediumParsed.length > 0 ? topTracksMediumParsed : allSongs.slice(0, 50),
+      // topArtists = Spotify's algorithmic top artists (medium term) — used for dashboard charts
+      topArtists: topArtistsMediumParsed.length > 0 ? topArtistsMediumParsed : artists.slice(0, 20),
+      totalPlays: 0,       // not available via OAuth — never fabricate this
+      totalMsPlayed: 0,    // not available via OAuth — never fabricate this
       dateRange: null,
+      dataSource: "oauth",
+      topTracksByTimeRange: {
+        short: topTracksShortParsed,
+        medium: topTracksMediumParsed,
+        long: topTracksLongParsed,
+      },
+      topArtistsByTimeRange: {
+        short: topArtistsShortParsed,
+        medium: topArtistsMediumParsed,
+        long: topArtistsLongParsed,
+      },
+      recentlyPlayed: recentlyPlayedDisplay,
       playlists,
+      userProfile: profile
+        ? {
+            name: profile.display_name,
+            email: profile.email,
+            image: profile.images[0]?.url,
+            country: profile.country,
+            product: profile.product,
+            followers: profile.followers?.total,
+          }
+        : undefined,
     };
 
     return NextResponse.json(result);
@@ -180,21 +395,4 @@ export async function GET() {
     console.error("Spotify sync error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
-}
-
-interface SpotifyTrack {
-  id: string;
-  name: string;
-  uri: string;
-  artists: Array<{ name: string }>;
-  album: { name: string };
-}
-
-interface SpotifyPlaylist {
-  id: string;
-  name: string;
-  description: string;
-  images: Array<{ url: string }>;
-  tracks: { total: number };
-  uri: string;
 }

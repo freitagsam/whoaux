@@ -90,6 +90,14 @@ export function parseSpotifyData(files: UploadedFile[]): ParsedSpotifyData {
   let totalPlays = 0;
   let totalMsPlayed = 0;
 
+  // Listening pattern accumulators
+  const hourlyDistribution = new Array<number>(24).fill(0);
+  const dailyDistribution = new Array<number>(7).fill(0);
+  const platformCounts: Record<string, number> = {};
+  let skippedCount = 0;
+  let shuffleOnCount = 0;
+  let patternTotal = 0; // entries counted for patterns (before skip filter)
+
   for (const file of streamingFiles) {
     const entries = file.data as SpotifyStreamEntry[];
     if (!Array.isArray(entries)) continue;
@@ -98,6 +106,22 @@ export function parseSpotifyData(files: UploadedFile[]): ParsedSpotifyData {
       if (!entry.master_metadata_track_name || !entry.spotify_track_uri) continue;
       // Skip podcasts/episodes
       if (entry.episode_name) continue;
+      // Count for patterns before the 15s filter
+      if (entry.ms_played > 0) {
+        patternTotal += 1;
+        if (entry.skipped === true || entry.reason_end === "fwdbtn") skippedCount += 1;
+        if (entry.shuffle === true) shuffleOnCount += 1;
+        if (entry.platform) {
+          const p = normalizePlatform(entry.platform);
+          platformCounts[p] = (platformCounts[p] ?? 0) + 1;
+        }
+        const date = new Date(entry.ts);
+        if (!isNaN(date.getTime())) {
+          hourlyDistribution[date.getHours()] += 1;
+          dailyDistribution[date.getDay()] += 1;
+        }
+      }
+
       // Skip very short plays (under 15 seconds = likely skip)
       if (entry.ms_played < 15000) continue;
 
@@ -133,8 +157,10 @@ export function parseSpotifyData(files: UploadedFile[]): ParsedSpotifyData {
       totalMsPlayed += entry.ms_played;
 
       const date = new Date(entry.ts);
-      if (!earliestDate || date < earliestDate) earliestDate = date;
-      if (!latestDate || date > latestDate) latestDate = date;
+      if (!isNaN(date.getTime())) {
+        if (!earliestDate || date < earliestDate) earliestDate = date;
+        if (!latestDate || date > latestDate) latestDate = date;
+      }
     }
   }
 
@@ -223,6 +249,17 @@ export function parseSpotifyData(files: UploadedFile[]): ParsedSpotifyData {
     likedSongs = songs.slice(0, Math.min(songs.length, 200));
   }
 
+  const listeningPatterns =
+    patternTotal > 0
+      ? {
+          hourlyDistribution,
+          dailyDistribution,
+          skipRate: skippedCount / patternTotal,
+          platformCounts,
+          shuffleRatio: shuffleOnCount / patternTotal,
+        }
+      : undefined;
+
   return {
     songs,
     artists,
@@ -239,7 +276,21 @@ export function parseSpotifyData(files: UploadedFile[]): ParsedSpotifyData {
             end: latestDate.toISOString(),
           }
         : null,
+    dataSource: "upload" as const,
+    listeningPatterns,
   };
+}
+
+// Normalize Spotify platform strings into readable labels
+function normalizePlatform(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes("ios") || lower.includes("iphone") || lower.includes("ipad")) return "iOS";
+  if (lower.includes("android")) return "Android";
+  if (lower.includes("windows")) return "Windows";
+  if (lower.includes("mac") || lower.includes("osx")) return "Mac";
+  if (lower.includes("web") || lower.includes("browser")) return "Web";
+  if (lower.includes("cast") || lower.includes("speaker")) return "Speaker";
+  return "Other";
 }
 
 export function formatPlaytime(ms: number): string {
